@@ -9,7 +9,16 @@
       "Bash(python -c \"from dotenv import dotenv_values; print\\(dotenv_values\\(''.env''\\)[''ANTHROPIC_API_KEY''][:20]\\)\")",
       "Bash(git --version)",
       "Bash(gh --version)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(python portfolio_monitor.py --force --once)",
+      "WebSearch",
+      "WebFetch(domain:openapi.tase.co.il)",
+      "WebFetch(domain:api.tase.co.il)",
+      "WebFetch(domain:www.tase.co.il)",
+      "WebFetch(domain:datahub.tase.co.il)",
+      "WebFetch(domain:content.tase.co.il)",
+      "WebFetch(domain:github.com)",
+      "Bash(python -c \"import portfolio_monitor; print\\(''OK''\\)\")"
     ]
   }
 }

@@ -106,7 +106,7 @@ COOLDOWN_HOURS = 48                    # Per-ticker cooldown
 MARKET_TZ = ZoneInfo("America/New_York")
 
 NEWS_HEADLINE_LIMIT = 5
-TECHNICAL_SCORE_THRESHOLD = 2          # ≥ 2 of 4 indicators must fire
+TECHNICAL_SCORE_THRESHOLD = 3          # ≥ 3 of 4 indicators must fire
 
 # Portfolio names (as they appear in the Excel) → Yahoo Finance tickers.
 TICKER_MAP: dict[str, str] = {
@@ -124,7 +124,8 @@ TICKER_MAP: dict[str, str] = {
     "ISHARES CORE MSCI EM IMI UCITS ETF": "EIMI.L",
     "ISHARES CORE S&P 500 UCITS ETF": "CSPX.L",
     "ISHARES NASDAQ 100 UCITS ETF": "CNDX.L",
-    # Israeli securities — add matching .TA tickers here if desired.
+    # El Al — traded on TASE, accessible via Yahoo Finance with .TA suffix
+    "אל על": "ELAL.TA",
 }
 
 # Rough US market holidays (NYSE full closures). Not exhaustive across years;
@@ -277,7 +278,7 @@ def resolve_tickers(names: list[str]) -> list[tuple[str, str]]:
         else:
             skipped.append(n)
     if skipped:
-        log.warning("No Yahoo ticker mapping for %d names (add to TICKER_MAP):", len(skipped))
+        log.warning("No Yahoo Finance ticker mapping for %d names (add to TICKER_MAP):", len(skipped))
         for s in skipped:
             log.warning("   - %s", s)
     return resolved
@@ -314,6 +315,7 @@ def fetch_history(ticker: str, period: str = "2y") -> Optional[pd.DataFrame]:
     except Exception as e:
         log.error("Error post-processing yfinance data for %s: %s", ticker, e)
         return None
+
 
 
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
@@ -370,7 +372,7 @@ def macd_crossed_down_recently(df: pd.DataFrame, lookback: int = 5) -> bool:
 def evaluate_technical_signals(df: pd.DataFrame) -> dict:
     """Evaluate 4 INDEPENDENT BUY indicators AND 4 INDEPENDENT SELL indicators.
 
-    A side passes the filter when at least TECHNICAL_SCORE_THRESHOLD (=2) of
+    A side passes the filter when at least TECHNICAL_SCORE_THRESHOLD (=3) of
     its 4 indicators fire. BUY and SELL are evaluated independently in the
     same scan.
 
@@ -697,11 +699,11 @@ def format_hybrid_alert(
     name: str,
     ticker: str,
     tech: dict,
-    llm: dict,
+    llm: Optional[dict],
     side: str,
 ) -> str:
     """Format the WhatsApp BUY/SELL alert. Headlines are NEVER included —
-    only the AI's distilled analysis."""
+    only the AI's distilled analysis (if available)."""
     if side == "BUY":
         header_emoji = "🟢"
         triggered = tech["buy_triggered"]
@@ -714,16 +716,30 @@ def format_hybrid_alert(
     triggered_lines = "\n".join(
         f"  • {ind['name']}: {ind['detail']}" for ind in triggered
     )
+
+    if llm is not None:
+        ai_sentiment = llm.get("sentiment", "N/A")
+        ai_analysis = llm.get("analysis", "")
+        if ai_sentiment != side:
+            ai_section = (
+                f"🤖 *AI Analysis* (sentiment: {ai_sentiment})\n"
+                f"⚠️ AI disagrees with technical signal.\n"
+                f"{ai_analysis}"
+            )
+        else:
+            ai_section = f"🤖 *AI Analysis* (sentiment: {ai_sentiment})\n{ai_analysis}"
+    else:
+        ai_section = "🤖 *AI Analysis*\nNo news available for this security."
+
     return (
         f"{header_emoji} *{side} SIGNAL* — {name} ({ticker})\n"
         f"📅 Date: {tech['date']}\n"
-        f"💵 Close: ${tech['close']:.2f}\n"
+        f"💵 Close: {tech['close']:.2f}\n"
         f"\n"
         f"📊 *Technical Score: {score}/4*\n"
         f"Triggered indicators:\n{triggered_lines}\n"
         f"\n"
-        f"🤖 *AI Fundamental Analysis*\n"
-        f"{llm['analysis']}"
+        f"{ai_section}"
     )
 
 
@@ -753,7 +769,7 @@ def run_once(force: bool = False) -> None:
 
     for name, ticker in tickers:
         try:
-            # ---------- Step 1: Technical filter (2/4 rule, both sides) ----------
+            # ---------- Step 1: Technical filter (3/4 rule, both sides) ----------
             df = fetch_history(ticker)
             if df is None:
                 continue
@@ -797,7 +813,9 @@ def _process_signal_side(
     tech: dict,
     state: dict,
 ) -> None:
-    """Run the news → LLM → WhatsApp pipeline for one side (BUY or SELL)."""
+    """Run the news → LLM → WhatsApp pipeline for one side (BUY or SELL).
+    WhatsApp is sent whenever the technical score passes (≥2/4), regardless
+    of what the AI says. AI analysis is included in the message when available."""
     triggered = tech["buy_triggered"] if side == "BUY" else tech["sell_triggered"]
     score = tech["buy_score"] if side == "BUY" else tech["sell_score"]
 
@@ -807,32 +825,25 @@ def _process_signal_side(
         ticker, side, score, indicator_names,
     )
 
-    # ---------- Step 2: News fetching ----------
+    # ---------- Step 2: News fetching (optional — alert is sent regardless) ----------
     headlines = fetch_news(ticker, limit=NEWS_HEADLINE_LIMIT)
+    llm: Optional[dict] = None
+
     if not headlines:
-        log.info("[%s] No news available — skipping LLM analysis (%s).", ticker, side)
-        return
+        log.info("[%s] No news available — will send alert without AI analysis (%s).", ticker, side)
+    else:
+        log.info("[%s] %d headline(s) fetched — calling Anthropic for %s…",
+                 ticker, len(headlines), side)
 
-    log.info("[%s] %d headline(s) fetched — calling Anthropic for %s…",
-             ticker, len(headlines), side)
+        # ---------- Step 3: LLM fundamental analysis ----------
+        llm = analyze_with_llm(ticker, headlines, side=side)
+        if llm is None:
+            log.warning("[%s] LLM analysis failed — sending alert without AI analysis.", ticker)
+        else:
+            log.info("[%s] LLM sentiment=%s (technical side=%s)",
+                     ticker, llm["sentiment"], side)
 
-    # ---------- Step 3: LLM fundamental analysis ----------
-    llm = analyze_with_llm(ticker, headlines, side=side)
-    if llm is None:
-        log.warning("[%s] LLM analysis failed — no %s alert.", ticker, side)
-        return
-
-    log.info("[%s] LLM sentiment=%s (technical side=%s)",
-             ticker, llm["sentiment"], side)
-
-    # ---------- Step 4: WhatsApp alert (only when LLM agrees with side) ----------
-    if llm["sentiment"] != side:
-        log.info(
-            "[%s] LLM did not confirm %s (sentiment=%s) — no alert.",
-            ticker, side, llm["sentiment"],
-        )
-        return
-
+    # ---------- Step 4: WhatsApp alert (always when technical filter passes) ----------
     if is_in_cooldown(state, ticker, side):
         log.info(
             "Cooldown active for %s %s — suppressing alert (%dh window).",
