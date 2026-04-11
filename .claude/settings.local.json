@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(python portfolio_monitor.py --once --force)",
+      "Bash(python -c \"from dotenv import load_dotenv; from pathlib import Path; load_dotenv\\(Path\\(''.env''\\)\\); import os; k=os.getenv\\(''ANTHROPIC_API_KEY''\\); print\\(''len:'', len\\(k\\) if k else None\\); print\\(''startswith:'', k[:20] if k else None\\); print\\(''has_angle:'', ''<'' in \\(k or ''''\\) or ''>'' in \\(k or ''''\\)\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(python -c \"import os; v=os.environ.get\\(''ANTHROPIC_API_KEY''\\); print\\(''system env var:'', repr\\(v\\)\\)\")",
+      "Bash(python -c \"from dotenv import dotenv_values; print\\(dotenv_values\\(''.env''\\)[''ANTHROPIC_API_KEY''][:20]\\)\")",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(gh auth:*)"
+    ]
+  }
+}

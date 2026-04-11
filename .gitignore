@@ -1,0 +1,15 @@
+# Environment variables (API keys, credentials)
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# State files (runtime data)
+signals_state.json
+
+# Excel portfolio file (personal financial data)
+*.xlsx
