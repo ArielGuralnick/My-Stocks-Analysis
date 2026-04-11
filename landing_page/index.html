@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smart Portfolio Sentinel — a hybrid technical & AI monitor</title>
+<meta name="description" content="A hybrid technical & AI-driven investment monitoring system built with Claude Code.">
+
+<!-- OpenGraph (for LinkedIn share preview) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Smart Portfolio Sentinel">
+<meta property="og:description" content="A hybrid technical & AI-driven investment monitoring system built with Claude Code.">
+<!-- TODO: replace og:image with a real preview image URL when deployed -->
+<meta property="og:image" content="">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garant:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=JetBrains+Mono:wght@300;400;500;700&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ─── Corner registration marks ─── -->
+<div class="reg reg--tl" aria-hidden="true"></div>
+<div class="reg reg--tr" aria-hidden="true"></div>
+<div class="reg reg--bl" aria-hidden="true"></div>
+<div class="reg reg--br" aria-hidden="true"></div>
+
+<!-- ─── Gutter signature (left spine) ─── -->
+<aside class="spine" aria-hidden="true">
+  <span>SPS / ISSUE №01 / APRIL MMXXVI</span>
+</aside>
+
+<!-- ─── Top rule / ticker bar ─── -->
+<header class="ticker" role="banner">
+  <div class="ticker__inner">
+    <span class="ticker__label">SMART&nbsp;PORTFOLIO&nbsp;SENTINEL <span class="ticker__sep">//</span> v1.0 <span class="ticker__sep">//</span> HYBRID&nbsp;MONITOR</span>
+    <span class="ticker__status">
+      <span class="ticker__dot" aria-hidden="true"></span>
+      MARKET&nbsp;LIVE
+    </span>
+  </div>
+</header>
+
+<!-- ─── Marquee strip: mock portfolio feed ─── -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee__track">
+    <span class="marquee__row">
+      <span class="mq"><b>NVDA</b> 874.21 <i class="up">▲ 2.14%</i> <em>MACD·BB·RSI</em></span>
+      <span class="mq"><b>AAPL</b> 218.47 <i class="dn">▼ 0.82%</i> <em>SMA200 hold</em></span>
+      <span class="mq"><b>MSFT</b> 432.06 <i class="up">▲ 1.03%</i> <em>neutral</em></span>
+      <span class="mq"><b>AMZN</b> 187.92 <i class="dn">▼ 1.47%</i> <em>SELL 3/4</em></span>
+      <span class="mq"><b>TSLA</b> 241.88 <i class="up">▲ 3.21%</i> <em>BUY 4/4</em></span>
+      <span class="mq"><b>GOOG</b> 164.30 <i class="dn">▼ 0.44%</i> <em>neutral</em></span>
+      <span class="mq"><b>META</b> 496.15 <i class="up">▲ 0.92%</i> <em>RSI·MACD</em></span>
+      <span class="mq"><b>ORCL</b> 137.58 <i class="dn">▼ 2.01%</i> <em>cooldown 48h</em></span>
+      <span class="mq"><b>ELAL.TA</b> 682.40 <i class="up">▲ 1.74%</i> <em>BUY 3/4</em></span>
+      <span class="mq"><b>AMD</b>  158.23 <i class="up">▲ 2.88%</i> <em>BB·MACD·RSI</em></span>
+    </span>
+    <!-- Duplicated for seamless loop -->
+    <span class="marquee__row" aria-hidden="true">
+      <span class="mq"><b>NVDA</b> 874.21 <i class="up">▲ 2.14%</i> <em>MACD·BB·RSI</em></span>
+      <span class="mq"><b>AAPL</b> 218.47 <i class="dn">▼ 0.82%</i> <em>SMA200 hold</em></span>
+      <span class="mq"><b>MSFT</b> 432.06 <i class="up">▲ 1.03%</i> <em>neutral</em></span>
+      <span class="mq"><b>AMZN</b> 187.92 <i class="dn">▼ 1.47%</i> <em>SELL 3/4</em></span>
+      <span class="mq"><b>TSLA</b> 241.88 <i class="up">▲ 3.21%</i> <em>BUY 4/4</em></span>
+      <span class="mq"><b>GOOG</b> 164.30 <i class="dn">▼ 0.44%</i> <em>neutral</em></span>
+      <span class="mq"><b>META</b> 496.15 <i class="up">▲ 0.92%</i> <em>RSI·MACD</em></span>
+      <span class="mq"><b>ORCL</b> 137.58 <i class="dn">▼ 2.01%</i> <em>cooldown 48h</em></span>
+      <span class="mq"><b>ELAL.TA</b> 682.40 <i class="up">▲ 1.74%</i> <em>BUY 3/4</em></span>
+      <span class="mq"><b>AMD</b>  158.23 <i class="up">▲ 2.88%</i> <em>BB·MACD·RSI</em></span>
+    </span>
+  </div>
+</div>
+
+<main>
+
+  <!-- ─── Hero ─── -->
+  <section class="hero" id="top">
+
+    <div class="hero__top">
+      <p class="hero__eyebrow">
+        <span>A&nbsp;PROJECT&nbsp;BY&nbsp;ARIEL&nbsp;GURALNICK</span>
+        <span class="hero__eyebrow-sep">//</span>
+        <span>BUILT&nbsp;WITH&nbsp;CLAUDE&nbsp;CODE</span>
+      </p>
+      <p class="hero__dateline">
+        <span class="k">FILED</span>
+        <span class="v">APR&nbsp;11,&nbsp;2026</span>
+        <span class="k">EDITION</span>
+        <span class="v">№01</span>
+      </p>
+    </div>
+
+    <div class="hero__body">
+
+      <h1 class="hero__headline">
+        <span class="hero__line" data-text="Smart Portfolio">Smart&nbsp;Portfolio</span>
+        <span class="hero__line hero__line--italic" data-text="Sentinel.">Sentinel<span class="hero__dot">.</span></span>
+      </h1>
+
+      <div class="hero__deck">
+        <p class="hero__subtitle">
+          A hybrid technical <span class="amp">&amp;</span> AI-driven investment monitoring system
+          built with Claude Code.<sup class="fn">1</sup> It reads your holdings, evaluates four
+          independent indicators,<sup class="fn">2</sup> asks Claude for a fundamental read,
+          and pushes the verdict to your phone.<sup class="fn">3</sup>
+        </p>
+
+        <div class="hero__ctas">
+          <a href="#form" class="cta cta--primary">
+            <span>Get&nbsp;the&nbsp;code</span>
+            <span class="cta__arrow" aria-hidden="true">↓</span>
+          </a>
+          <a href="#workflow" class="cta cta--ghost">
+            <span>See&nbsp;how&nbsp;it&nbsp;works</span>
+            <span class="cta__arrow" aria-hidden="true">↓</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Marginalia / footnotes -->
+      <aside class="margin" aria-label="Footnotes">
+        <p class="margin__note">
+          <sup>1</sup> A command-line Python agent orchestrated by Claude. No framework, no dashboard — just signal.
+        </p>
+        <p class="margin__note">
+          <sup>2</sup> SMA200, RSI14, MACD, Bollinger Bands 20/2. Confluence of 3&nbsp;of&nbsp;4 required before any alert.
+        </p>
+        <p class="margin__note">
+          <sup>3</sup> Fully formatted WhatsApp message via Green API. 48-hour per-ticker cooldown baked in.
+        </p>
+      </aside>
+    </div>
+
+    <div class="hero__meta">
+      <div class="hero__meta-cell">
+        <span class="hero__meta-k">INDICATORS</span>
+        <span class="hero__meta-v">04</span>
+      </div>
+      <div class="hero__meta-cell">
+        <span class="hero__meta-k">THRESHOLD</span>
+        <span class="hero__meta-v">3 / 4</span>
+      </div>
+      <div class="hero__meta-cell">
+        <span class="hero__meta-k">AI&nbsp;MODEL</span>
+        <span class="hero__meta-v">SONNET&nbsp;4.5</span>
+      </div>
+      <div class="hero__meta-cell">
+        <span class="hero__meta-k">COOLDOWN</span>
+        <span class="hero__meta-v">48&nbsp;H</span>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ─── Workflow (3 staggered plates with sparklines) ─── -->
+  <section class="workflow" id="workflow">
+    <span class="section-numeral" aria-hidden="true">I</span>
+
+    <div class="section-head">
+      <span class="section-head__tag">§ 01 · WORKFLOW</span>
+      <h2 class="section-head__title">The&nbsp;<em>three-step</em>&nbsp;filter.</h2>
+      <p class="section-head__lede">
+        One script. Three layers of scrutiny. No manual trading. No mock data.
+        Every signal must survive technicals, fundamentals, and cooldown.
+      </p>
+    </div>
+
+    <ol class="plates" role="list">
+
+      <li class="plate plate--one reveal">
+        <span class="plate__numeral">01</span>
+        <div class="plate__content">
+          <p class="plate__kicker">EXCEL&nbsp;INGEST&nbsp;&middot;&nbsp;TECHNICAL&nbsp;FILTER</p>
+          <h3 class="plate__title">Four&nbsp;indicators.<br><em>Confluence&nbsp;required.</em></h3>
+          <p class="plate__body">
+            Loads your portfolio straight from an Excel export. Pulls two years of daily
+            OHLCV from Yahoo Finance and evaluates four independent indicators —
+            <span class="tag">SMA&nbsp;200</span>
+            <span class="tag">RSI&nbsp;14</span>
+            <span class="tag">MACD</span>
+            <span class="tag">BB&nbsp;20/2</span> —
+            on both the BUY and SELL sides. A signal only fires when at least three of
+            four confirm each other.
+          </p>
+        </div>
+        <svg class="plate__spark" viewBox="0 0 220 64" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0,44 L16,40 L30,46 L44,34 L58,38 L72,28 L86,32 L100,22 L114,26 L128,16 L142,20 L156,12 L170,18 L184,10 L198,14 L220,6"
+                fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M0,56 L220,56" stroke="rgba(244,239,230,.12)" stroke-width="1" stroke-dasharray="2 3"/>
+        </svg>
+      </li>
+
+      <li class="plate plate--two reveal">
+        <span class="plate__numeral">02</span>
+        <div class="plate__content">
+          <p class="plate__kicker">AI&nbsp;FUNDAMENTAL&nbsp;LAYER&nbsp;&middot;&nbsp;CLAUDE&nbsp;SONNET&nbsp;4.5</p>
+          <h3 class="plate__title">Claude&nbsp;reads&nbsp;the&nbsp;news.<br><em>You&nbsp;get&nbsp;the&nbsp;verdict.</em></h3>
+          <p class="plate__body">
+            When the technical filter triggers, the system pulls the five most recent
+            headlines via yfinance and hands them to Claude. Claude returns a strict JSON
+            verdict — BUY, SELL, or HOLD — with a concise three-sentence fundamental
+            analysis. Raw headlines never touch your phone.
+          </p>
+        </div>
+        <svg class="plate__spark" viewBox="0 0 220 64" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0,32 C20,32 30,18 50,18 C70,18 80,48 100,48 C120,48 130,20 150,20 C170,20 180,42 220,42"
+                fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          <circle cx="50" cy="18" r="2.4" fill="currentColor"/>
+          <circle cx="100" cy="48" r="2.4" fill="currentColor"/>
+          <circle cx="150" cy="20" r="2.4" fill="currentColor"/>
+        </svg>
+      </li>
+
+      <li class="plate plate--three reveal">
+        <span class="plate__numeral">03</span>
+        <div class="plate__content">
+          <p class="plate__kicker">REAL-TIME&nbsp;WHATSAPP&nbsp;ALERTS&nbsp;&middot;&nbsp;GREEN&nbsp;API</p>
+          <h3 class="plate__title">One&nbsp;message.<br><em>Everything&nbsp;you&nbsp;need.</em></h3>
+          <p class="plate__body">
+            A fully-formatted alert lands in WhatsApp with the indicators that fired, the
+            AI's take, and a flag when the two disagree. A 48-hour per-ticker cooldown
+            keeps you out of spam territory. The alert goes out whether or not Claude
+            agrees with the technicals — you decide.
+          </p>
+        </div>
+        <svg class="plate__spark" viewBox="0 0 220 64" preserveAspectRatio="none" aria-hidden="true">
+          <rect x="4"   y="40" width="6" height="20" fill="currentColor" opacity=".35"/>
+          <rect x="18"  y="28" width="6" height="32" fill="currentColor" opacity=".45"/>
+          <rect x="32"  y="34" width="6" height="26" fill="currentColor" opacity=".4"/>
+          <rect x="46"  y="18" width="6" height="42" fill="currentColor" opacity=".6"/>
+          <rect x="60"  y="22" width="6" height="38" fill="currentColor" opacity=".55"/>
+          <rect x="74"  y="10" width="6" height="50" fill="currentColor" opacity=".8"/>
+          <rect x="88"  y="16" width="6" height="44" fill="currentColor" opacity=".7"/>
+          <rect x="102" y="4"  width="6" height="56" fill="currentColor"/>
+          <rect x="116" y="12" width="6" height="48" fill="currentColor" opacity=".75"/>
+          <rect x="130" y="24" width="6" height="36" fill="currentColor" opacity=".5"/>
+          <rect x="144" y="18" width="6" height="42" fill="currentColor" opacity=".6"/>
+          <rect x="158" y="30" width="6" height="30" fill="currentColor" opacity=".45"/>
+          <rect x="172" y="22" width="6" height="38" fill="currentColor" opacity=".55"/>
+          <rect x="186" y="34" width="6" height="26" fill="currentColor" opacity=".4"/>
+          <rect x="200" y="26" width="6" height="34" fill="currentColor" opacity=".5"/>
+          <rect x="214" y="14" width="6" height="46" fill="currentColor" opacity=".7"/>
+        </svg>
+      </li>
+
+    </ol>
+  </section>
+
+
+  <!-- ─── Mock WhatsApp alert in phone frame ─── -->
+  <section class="capture" id="capture">
+    <span class="section-numeral" aria-hidden="true">II</span>
+
+    <div class="section-head section-head--centered">
+      <span class="section-head__tag">§ 02 · DELIVERY</span>
+      <h2 class="section-head__title">Live&nbsp;<em>on&nbsp;your&nbsp;phone</em>.</h2>
+      <p class="section-head__lede">
+        Every alert arrives pre-formatted, readable, timestamped — straight into a
+        chat you already check a hundred times a day.
+      </p>
+    </div>
+
+    <figure class="phone">
+      <div class="phone__frame">
+        <!-- TODO: replace src with your WhatsApp screenshot path (e.g. whatsapp.png). While empty, the mock chat below is shown. -->
+        <img id="whatsapp-screenshot" src="" alt="WhatsApp alert screenshot from Smart Portfolio Sentinel">
+
+        <!-- Mock WhatsApp conversation (shown until real screenshot is provided) -->
+        <div class="phone__mock" aria-hidden="true">
+          <div class="wa__header">
+            <span class="wa__back">‹</span>
+            <div class="wa__avatar">SPS</div>
+            <div class="wa__meta">
+              <span class="wa__name">Portfolio Sentinel</span>
+              <span class="wa__presence">online</span>
+            </div>
+            <span class="wa__ico">⋮</span>
+          </div>
+
+          <div class="wa__body">
+            <div class="wa__date">TODAY</div>
+
+            <div class="wa__bubble">
+              <p class="wa__title">📉 SELL SIGNAL — AMZN</p>
+              <p class="wa__line"><b>Price:</b> $187.92</p>
+              <p class="wa__line"><b>Score:</b> 3 / 4 indicators</p>
+              <p class="wa__tags">
+                <span>SMA200</span><span>RSI14</span><span>MACD</span>
+              </p>
+              <p class="wa__rule"></p>
+              <p class="wa__line"><b>Claude (Sonnet 4.5):</b> HOLD</p>
+              <p class="wa__para">
+                Recent headlines cite a strong AWS re:Invent cycle and analyst upgrades
+                on the retail segment. Technicals look extended but fundamental
+                tailwinds remain intact. Short-term weakness may be a buying window.
+              </p>
+              <p class="wa__warn">⚠️ AI disagrees with technical signal.</p>
+              <span class="wa__time">09:41 ✓✓</span>
+            </div>
+
+            <div class="wa__bubble wa__bubble--small">
+              <p class="wa__line">⏱ Next check in 48h (cooldown active).</p>
+              <span class="wa__time">09:41 ✓✓</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashed fallback (only shown if both img and mock are somehow hidden) -->
+        <div class="phone__placeholder">
+          <span class="phone__caption">INSERT&nbsp;WHATSAPP&nbsp;CAPTURE</span>
+          <span class="phone__hint">9:19 aspect — swap the img src in index.html</span>
+        </div>
+      </div>
+      <figcaption class="phone__figcaption">
+        FIG.&nbsp;01&nbsp;&nbsp;&mdash;&nbsp;&nbsp;Sample&nbsp;SELL&nbsp;alert&nbsp;pushed&nbsp;via&nbsp;Green&nbsp;API
+      </figcaption>
+    </figure>
+  </section>
+
+
+  <!-- ─── Lead gen form ─── -->
+  <section class="form-section" id="form">
+    <span class="section-numeral" aria-hidden="true">III</span>
+
+    <div class="form-grid">
+      <div class="form-copy">
+        <span class="section-head__tag">§ 03 · ENQUIRY</span>
+        <h2 class="form-copy__title">Want&nbsp;the&nbsp;<em>code</em>?</h2>
+        <p class="form-copy__lede">
+          Leave your details. I'll send you the full prompt and repository,
+          or ping you when the cloud version goes live — no spam, no newsletter,
+          no upsell.
+        </p>
+        <div class="form-copy__meta">
+          <p><span class="k">Response&nbsp;time</span><span class="v">within&nbsp;24h</span></p>
+          <p><span class="k">Cost</span><span class="v">free</span></p>
+          <p><span class="k">Licence</span><span class="v">personal&nbsp;use</span></p>
+          <p><span class="k">Format</span><span class="v">git&nbsp;repo&nbsp;+&nbsp;prompt</span></p>
+        </div>
+      </div>
+
+      <!-- TODO: replace YOUR_FORM_ID with your Formspree endpoint -->
+      <form class="lead-form" id="lead-form" action="https://formspree.io/f/meepynpo" method="POST" novalidate>
+
+        <div class="field">
+          <label for="fullName"><span>Full&nbsp;name</span> <span class="req">*</span></label>
+          <input id="fullName" name="fullName" type="text" required autocomplete="name" placeholder="Jane Cohen">
+        </div>
+
+        <div class="field">
+          <label for="email"><span>Email</span> <span class="req">*</span></label>
+          <input id="email" name="email" type="email" required autocomplete="email" placeholder="jane@example.com">
+        </div>
+
+        <div class="field">
+          <label for="linkedin"><span>LinkedIn&nbsp;profile</span> <span class="opt">optional</span></label>
+          <input id="linkedin" name="linkedin" type="url" autocomplete="url" placeholder="https://linkedin.com/in/…">
+        </div>
+
+        <div class="field">
+          <label for="interest"><span>What&nbsp;do&nbsp;you&nbsp;want?</span> <span class="req">*</span></label>
+          <div class="select-wrap">
+            <select id="interest" name="interest" required>
+              <option value="" disabled selected>Choose one…</option>
+              <option value="code">I want the Code / Prompt</option>
+              <option value="cloud">Notify me when the Cloud version is ready</option>
+            </select>
+            <span class="select-wrap__arrow" aria-hidden="true">▾</span>
+          </div>
+        </div>
+
+        <button type="submit" class="submit">
+          <span>Send&nbsp;request</span>
+          <span class="submit__arrow" aria-hidden="true">→</span>
+        </button>
+
+        <p class="form-error" id="form-error" hidden>Something went wrong. Please try again or email me directly.</p>
+
+      </form>
+
+      <!-- Success state (shown after successful submit) -->
+      <div class="form-success" id="form-success" hidden>
+        <span class="form-success__tag">TRANSMISSION&nbsp;RECEIVED</span>
+        <h3 class="form-success__title">Thanks&nbsp;&mdash;&nbsp;<em>you're&nbsp;on&nbsp;the&nbsp;list</em>.</h3>
+        <p class="form-success__body">
+          I'll be in touch within 24 hours at the address you provided.
+          Until then, keep an eye on your portfolio.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+
+<!-- ─── Footer ─── -->
+<footer class="foot">
+  <div class="foot__inner">
+    <span class="foot__left">BUILT&nbsp;WITH&nbsp;CLAUDE&nbsp;CODE</span>
+    <span class="foot__center">— END&nbsp;OF&nbsp;TRANSMISSION —</span>
+    <!-- TODO: replace YOUR_LINKEDIN_URL with your actual LinkedIn profile URL -->
+    <a class="foot__right" href="https://www.linkedin.com/in/ariel-guralnick-b01802206/" target="_blank" rel="noopener noreferrer">
+      → ARIEL&nbsp;GURALNICK&nbsp;/&nbsp;LINKEDIN
+    </a>
+  </div>
+  <p class="foot__fine">
+    © 2026&nbsp;&nbsp;&mdash;&nbsp;&nbsp;FOR&nbsp;EDUCATIONAL&nbsp;PURPOSES&nbsp;ONLY.&nbsp;&nbsp;NOT&nbsp;FINANCIAL&nbsp;ADVICE.
+  </p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
