@@ -1012,7 +1012,7 @@ main {
   max-width: var(--max-w);
   margin: 0 auto;
   font-family: var(--f-mono);
-  font-size: 0.85rem;
+  font-size: 0.7rem;
   letter-spacing: 0.08em;
   color: var(--text);
   text-transform: uppercase;
