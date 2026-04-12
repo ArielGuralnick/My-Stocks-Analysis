@@ -1012,13 +1012,14 @@ main {
   max-width: var(--max-w);
   margin: 0 auto;
   font-family: var(--f-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: var(--text);
   text-transform: uppercase;
   text-align: center;
   word-break: break-word;
   overflow-wrap: break-word;
+  padding-top: 0.5rem;
 }
 
 /* ─── 14. Responsive ──────────────────────────────────────────────── */
