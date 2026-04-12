@@ -92,18 +92,30 @@ WHATSAPP_PHONE_NUMBER = os.getenv("WHATSAPP_PHONE_NUMBER")  # e.g. 972501234567
 
 # Anthropic API (LLM fundamental analysis)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
-EXCEL_FILE = r"C:\Users\ArielGuralnick\Downloads\Excellence_040426.xlsx"
-TICKER_COLUMN = "שם נייר"             # Column in the Excel file holding the security name
-HEADER_ROW = 9                         # 0-indexed row where headers are located
+EXCEL_FILE = os.getenv("EXCEL_FILE", "")
+if not EXCEL_FILE:
+    # Fallback: look for the most recent Excellence_*.xlsx in Downloads
+    _downloads = Path.home() / "Downloads"
+    _candidates = sorted(_downloads.glob("Excellence_*.xlsx"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if _candidates:
+        EXCEL_FILE = str(_candidates[0])
+
+TICKER_COLUMN = os.getenv("TICKER_COLUMN", "שם נייר")  # Column holding the security name
+HEADER_ROW = int(os.getenv("HEADER_ROW", "9"))          # 0-indexed row where headers are
 CHECK_INTERVAL_SECONDS = 2 * 60 * 60   # 2 hours (continuous mode)
 
-STATE_FILE = BASE_DIR / "signals_state.json"
-LOG_FILE = BASE_DIR / "trading_bot.log"
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+STATE_FILE = DATA_DIR / "signals_state.json"
+SCAN_HISTORY_FILE = DATA_DIR / "scan_history.json"
+LOG_FILE = DATA_DIR / "trading_bot.log"
 
 COOLDOWN_HOURS = 48                    # Per-ticker cooldown
 MARKET_TZ = ZoneInfo("America/New_York")
+API_MAX_RETRIES = 3                    # Retry count for Anthropic & Green API
+API_RETRY_DELAY = 5                    # Seconds between retries
 
 NEWS_HEADLINE_LIMIT = 5
 TECHNICAL_SCORE_THRESHOLD = 3          # ≥ 3 of 4 indicators must fire
@@ -124,8 +136,6 @@ TICKER_MAP: dict[str, str] = {
     "ISHARES CORE MSCI EM IMI UCITS ETF": "EIMI.L",
     "ISHARES CORE S&P 500 UCITS ETF": "CSPX.L",
     "ISHARES NASDAQ 100 UCITS ETF": "CNDX.L",
-    # El Al — traded on TASE, accessible via Yahoo Finance with .TA suffix
-    "אל על": "ELAL.TA",
 }
 
 # Rough US market holidays (NYSE full closures). Not exhaustive across years;
@@ -229,6 +239,36 @@ def save_state(state: dict) -> None:
         tmp.replace(STATE_FILE)
     except Exception as e:
         log.error("Failed to write signals_state.json: %s", e)
+
+
+# ---------------------------------------------------------------------------
+# SCAN HISTORY (for dashboard)
+# ---------------------------------------------------------------------------
+
+MAX_SCAN_HISTORY = 50  # Keep last N scans
+
+def load_scan_history() -> list[dict]:
+    if not SCAN_HISTORY_FILE.exists():
+        return []
+    try:
+        with SCAN_HISTORY_FILE.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def save_scan_record(record: dict) -> None:
+    history = load_scan_history()
+    history.insert(0, record)
+    history = history[:MAX_SCAN_HISTORY]
+    try:
+        tmp = SCAN_HISTORY_FILE.with_suffix(".json.tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
+        tmp.replace(SCAN_HISTORY_FILE)
+    except Exception as e:
+        log.error("Failed to write scan_history.json: %s", e)
 
 
 def is_in_cooldown(state: dict, ticker: str, signal_type: str) -> bool:
@@ -616,19 +656,27 @@ def analyze_with_llm(ticker: str, headlines: list[str], side: str) -> Optional[d
         log.error("anthropic package not installed. Run: pip install anthropic")
         return None
 
-    try:
-        client = Anthropic(api_key=ANTHROPIC_API_KEY)
-        resp = client.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=500,
-            system=_LLM_SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": _build_llm_user_prompt(ticker, headlines, side)},
-            ],
-        )
-    except Exception as e:
-        log.error("Anthropic API call failed for %s: %s", ticker, e)
-        return None
+    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+    resp = None
+    for attempt in range(1, API_MAX_RETRIES + 1):
+        try:
+            resp = client.messages.create(
+                model=ANTHROPIC_MODEL,
+                max_tokens=500,
+                system=_LLM_SYSTEM_PROMPT,
+                messages=[
+                    {"role": "user", "content": _build_llm_user_prompt(ticker, headlines, side)},
+                ],
+            )
+            break
+        except Exception as e:
+            log.error("Anthropic API attempt %d/%d failed for %s: %s",
+                      attempt, API_MAX_RETRIES, ticker, e)
+            if attempt < API_MAX_RETRIES:
+                time.sleep(API_RETRY_DELAY * attempt)
+            else:
+                log.error("Anthropic API exhausted all %d retries for %s.", API_MAX_RETRIES, ticker)
+                return None
 
     # Concatenate any text blocks in the response.
     try:
@@ -671,28 +719,41 @@ def send_whatsapp(message: str) -> bool:
         "message": message,
     }
 
-    try:
-        r = requests.post(url, json=payload, timeout=20)
-    except requests.exceptions.Timeout:
-        log.error("WhatsApp send timed out after 20s")
-        return False
-    except requests.exceptions.ConnectionError as e:
-        log.error("WhatsApp connection error: %s", e)
-        return False
-    except Exception as e:
-        log.error("WhatsApp unexpected exception: %s", e)
-        return False
+    for attempt in range(1, API_MAX_RETRIES + 1):
+        try:
+            r = requests.post(url, json=payload, timeout=20)
+        except requests.exceptions.Timeout:
+            log.error("WhatsApp send timed out (attempt %d/%d)", attempt, API_MAX_RETRIES)
+            if attempt < API_MAX_RETRIES:
+                time.sleep(API_RETRY_DELAY * attempt)
+                continue
+            return False
+        except requests.exceptions.ConnectionError as e:
+            log.error("WhatsApp connection error (attempt %d/%d): %s", attempt, API_MAX_RETRIES, e)
+            if attempt < API_MAX_RETRIES:
+                time.sleep(API_RETRY_DELAY * attempt)
+                continue
+            return False
+        except Exception as e:
+            log.error("WhatsApp unexpected exception: %s", e)
+            return False
 
-    try:
-        if r.status_code == 200:
-            mid = r.json().get("idMessage", "ok")
-            log.info("WhatsApp sent (idMessage=%s)", mid)
-            return True
-        log.error("WhatsApp send failed: HTTP %s — %s", r.status_code, r.text[:300])
-        return False
-    except Exception as e:
-        log.error("WhatsApp response parse error: %s", e)
-        return False
+        try:
+            if r.status_code == 200:
+                mid = r.json().get("idMessage", "ok")
+                log.info("WhatsApp sent (idMessage=%s)", mid)
+                return True
+            log.error("WhatsApp send failed: HTTP %s — %s (attempt %d/%d)",
+                      r.status_code, r.text[:300], attempt, API_MAX_RETRIES)
+            if r.status_code >= 500 and attempt < API_MAX_RETRIES:
+                time.sleep(API_RETRY_DELAY * attempt)
+                continue
+            return False
+        except Exception as e:
+            log.error("WhatsApp response parse error: %s", e)
+            return False
+
+    return False
 
 
 def format_hybrid_alert(
@@ -755,23 +816,45 @@ def run_once(force: bool = False) -> None:
         log.info("Market closed — no checks performed. (%s)", reason)
         return
 
-    try:
-        names = load_portfolio_names(EXCEL_FILE)
-    except Exception as e:
-        log.error("Loading Excel failed: %s", e)
-        log.debug(traceback.format_exc())
+    # Cloud / no-Excel fallback: TICKERS env var (comma-separated Yahoo symbols).
+    _tickers_env = os.getenv("TICKERS", "").strip()
+    if _tickers_env:
+        tickers = [(t.strip(), t.strip()) for t in _tickers_env.split(",") if t.strip()]
+        log.info("Using TICKERS env var: %s", ", ".join(t for _, t in tickers))
+    elif not EXCEL_FILE:
+        log.error("No tickers configured. Set TICKERS or EXCEL_FILE in env.")
         return
-
-    tickers = resolve_tickers(names)
+    elif not Path(EXCEL_FILE).exists():
+        log.error("Excel file not found: %s", EXCEL_FILE)
+        return
+    else:
+        try:
+            names = load_portfolio_names(EXCEL_FILE)
+        except Exception as e:
+            log.error("Loading Excel failed: %s", e)
+            log.debug(traceback.format_exc())
+            return
+        tickers = resolve_tickers(names)
     log.info("Monitoring %d symbols.", len(tickers))
 
     state = load_state()
+
+    scan_record: dict = {
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "market_status": reason,
+        "forced": force,
+        "tickers_count": len(tickers),
+        "results": [],
+        "alerts_sent": [],
+        "errors": [],
+    }
 
     for name, ticker in tickers:
         try:
             # ---------- Step 1: Technical filter (3/4 rule, both sides) ----------
             df = fetch_history(ticker)
             if df is None:
+                scan_record["errors"].append({"ticker": ticker, "error": "No data from yfinance"})
                 continue
 
             df = compute_indicators(df)
@@ -784,25 +867,41 @@ def run_once(force: bool = False) -> None:
                 tech["buy_score"], tech["sell_score"],
             )
 
-            # Evaluate each side independently. (Theoretically both could fire
-            # in the same scan — e.g. mixed signals — so we check each.)
+            ticker_result = {
+                "name": name,
+                "ticker": ticker,
+                "close": tech["close"],
+                "rsi": round(tech["rsi"], 2),
+                "sma200_delta_pct": round((tech["close"] - tech["sma200"]) / tech["sma200"] * 100, 2),
+                "buy_score": tech["buy_score"],
+                "sell_score": tech["sell_score"],
+                "buy_passes": tech["buy_passes"],
+                "sell_passes": tech["sell_passes"],
+            }
+            scan_record["results"].append(ticker_result)
+
+            # Evaluate each side independently.
             for side in ("BUY", "SELL"):
                 passes = tech["buy_passes"] if side == "BUY" else tech["sell_passes"]
                 if not passes:
                     continue
 
-                _process_signal_side(
+                alert_info = _process_signal_side(
                     name=name,
                     ticker=ticker,
                     side=side,
                     tech=tech,
                     state=state,
                 )
+                if alert_info:
+                    scan_record["alerts_sent"].append(alert_info)
 
         except Exception as e:
             log.error("Error processing %s: %s", ticker, e)
             log.debug(traceback.format_exc())
+            scan_record["errors"].append({"ticker": ticker, "error": str(e)})
 
+    save_scan_record(scan_record)
     log.info("===== SCAN end =====")
 
 
@@ -812,10 +911,10 @@ def _process_signal_side(
     side: str,
     tech: dict,
     state: dict,
-) -> None:
+) -> Optional[dict]:
     """Run the news → LLM → WhatsApp pipeline for one side (BUY or SELL).
-    WhatsApp is sent whenever the technical score passes (≥2/4), regardless
-    of what the AI says. AI analysis is included in the message when available."""
+    WhatsApp is sent whenever the technical score passes, regardless
+    of what the AI says. Returns alert info dict if sent, None otherwise."""
     triggered = tech["buy_triggered"] if side == "BUY" else tech["sell_triggered"]
     score = tech["buy_score"] if side == "BUY" else tech["sell_score"]
 
@@ -849,17 +948,29 @@ def _process_signal_side(
             "Cooldown active for %s %s — suppressing alert (%dh window).",
             ticker, side, COOLDOWN_HOURS,
         )
-        return
+        return None
 
     message = format_hybrid_alert(name, ticker, tech, llm, side=side)
     log.info("ALERT %s %s\n%s", side, ticker, message)
 
-    if send_whatsapp(message):
+    sent = send_whatsapp(message)
+    if sent:
         mark_alerted(state, ticker, side)
     else:
         log.warning(
             "Alert NOT marked as sent (WhatsApp failed) — will retry next scan."
         )
+
+    return {
+        "ticker": ticker,
+        "name": name,
+        "side": side,
+        "score": score,
+        "indicators": indicator_names,
+        "ai_sentiment": llm["sentiment"] if llm else None,
+        "whatsapp_sent": sent,
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+    }
 
 
 # ---------------------------------------------------------------------------

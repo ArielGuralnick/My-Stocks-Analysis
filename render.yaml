@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: portfolio-sentinel-dashboard
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn dashboard:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120
+    envVars:
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-6
+      # Set these in the Render dashboard (Environment tab) — do NOT commit real values:
+      # ANTHROPIC_API_KEY       your Anthropic key
+      # GREEN_API_ID_INSTANCE   your Green API instance
+      # GREEN_API_TOKEN_INSTANCE your Green API token
+      # WHATSAPP_PHONE_NUMBER   e.g. 972501234567
+      # TICKERS                 comma-separated Yahoo symbols, e.g. AAPL,MSFT,TSLA,NVDA,AMZN
+      - key: DATA_DIR
+        value: /app/data
+    disk:
+      name: portfolio-data
+      mountPath: /app/data
+      sizeGB: 1

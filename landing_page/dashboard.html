@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Portfolio Monitor — Smart Portfolio Sentinel</title>
+<meta name="description" content="Live dashboard for Smart Portfolio Sentinel — hybrid technical & AI monitoring system.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garant:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=JetBrains+Mono:wght@300;400;500;700&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+
+<style>
+/* ─── Tokens (inheriting landing page palette) ─── */
+:root {
+  --bg:           #07070d;
+  --surface:      #101019;
+  --surface-hi:   #13121f;
+  --surface-2:    #1a1928;
+  --border:       rgba(210, 200, 255, 0.07);
+  --border-hi:    rgba(210, 200, 255, 0.18);
+
+  --amber:        #c0801e;
+  --amber-bright: #e09a30;
+  --amber-text:   #f0bc60;
+  --amber-glow:   rgba(192, 128, 30, 0.14);
+
+  --cyan:         #00d9b8;
+  --cyan-dim:     rgba(0, 217, 184, 0.65);
+  --red:          #ff3055;
+  --red-dim:      rgba(255, 48, 85, 0.65);
+  --yellow:       #fbbf24;
+  --green:        #34d399;
+
+  --text:         #eae5db;
+  --text-dim:     rgba(234, 229, 219, 0.55);
+  --text-faint:   rgba(234, 229, 219, 0.22);
+  --text-ghost:   rgba(234, 229, 219, 0.055);
+
+  --f-display:    'Cormorant Garant', Georgia, serif;
+  --f-mono:       'JetBrains Mono', 'Courier New', monospace;
+  --f-body:       'Lora', Georgia, serif;
+
+  --pad-x:        clamp(1.5rem, 5vw, 5rem);
+  --max-w:        1320px;
+  --ease:         cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+html, body { overflow-x: hidden; max-width: 100%; }
+
+body {
+  font-family: var(--f-body);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  background-image:
+    radial-gradient(ellipse 90% 50% at 12% 4%,  rgba(192,128,30,0.055) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 60% at 88% 96%, rgba(0,217,184,0.04)   0%, transparent 55%);
+}
+
+/* CRT scan-lines */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255,255,255,0.011) 2px, rgba(255,255,255,0.011) 3px);
+  pointer-events: none; z-index: 9999;
+}
+/* Film grain */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.028; pointer-events: none; z-index: 9998;
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ─── Corner marks ─── */
+.reg { position: fixed; width: 20px; height: 20px; z-index: 300; pointer-events: none; }
+.reg::before, .reg::after { content: ''; position: absolute; background: var(--amber); opacity: 0.4; }
+.reg::before { width: 100%; height: 1px; top: 50%; transform: translateY(-50%); }
+.reg::after  { width: 1px; height: 100%; left: 50%; transform: translateX(-50%); }
+.reg--tl { top: 1.5rem; left: 1.5rem; }
+.reg--tr { top: 1.5rem; right: 1.5rem; }
+.reg--bl { bottom: 1.5rem; left: 1.5rem; }
+.reg--br { bottom: 1.5rem; right: 1.5rem; }
+
+/* ─── Nav bar ─── */
+.nav {
+  position: sticky; top: 0; z-index: 500;
+  background: rgba(7, 7, 13, 0.92);
+  backdrop-filter: blur(14px) saturate(1.6);
+  border-bottom: 1px solid var(--amber);
+  box-shadow: 0 1px 0 rgba(192, 128, 30, 0.25), 0 0 32px rgba(192,128,30,0.12);
+}
+.nav__inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 0.8rem var(--pad-x);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.nav__title {
+  font-family: var(--f-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.22em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.nav__title b { color: var(--amber-text); font-weight: 500; }
+.nav__right {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+.nav__greeting {
+  font-family: var(--f-mono);
+  font-size: 0.6rem;
+  color: var(--cyan);
+  letter-spacing: 0.08em;
+}
+.nav__link {
+  font-family: var(--f-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border-hi);
+  transition: color 0.2s, border-color 0.2s;
+}
+.nav__link:hover { color: var(--amber-text); border-color: var(--amber); }
+.edit-name-btn {
+  background: none; border: 1px solid var(--border-hi);
+  font-family: var(--f-mono);
+  font-size: 0.55rem; letter-spacing: 0.1em;
+  color: var(--text-faint);
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.edit-name-btn:hover { color: var(--amber-text); border-color: var(--amber); }
+
+/* ─── Dashboard container ─── */
+.dash {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: clamp(2rem, 4vw, 3.5rem) var(--pad-x);
+}
+
+/* ─── Page header ─── */
+.dash__header {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.dash__tag {
+  font-family: var(--f-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.24em;
+  color: var(--amber);
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+.dash__title {
+  font-family: var(--f-display);
+  font-size: clamp(2.4rem, 5vw, 4rem);
+  font-weight: 300;
+  line-height: 1.08;
+  letter-spacing: -0.028em;
+  color: var(--text);
+}
+.dash__title em { font-style: italic; color: var(--amber-text); }
+.dash__subtitle {
+  font-family: var(--f-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-top: 0.5rem;
+}
+
+/* ─── Stat strip ─── */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border-hi);
+  border: 1px solid var(--border-hi);
+  margin-bottom: 2rem;
+}
+.stat {
+  background: var(--surface);
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+  transition: background 0.2s;
+}
+.stat:hover { background: var(--surface-hi); }
+.stat__value {
+  font-family: var(--f-mono);
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 700;
+  color: var(--amber-text);
+  letter-spacing: -0.02em;
+}
+.stat__label {
+  font-family: var(--f-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: 0.35rem;
+}
+
+/* ─── Grid ─── */
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* ─── Card ─── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  overflow: hidden;
+}
+.card--full { grid-column: 1 / -1; }
+.card__head {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.card__dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber-glow);
+}
+.card__title {
+  font-family: var(--f-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.card__body { padding: 0; }
+
+/* ─── Table ─── */
+table { width: 100%; border-collapse: collapse; }
+th {
+  text-align: left;
+  font-family: var(--f-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-hi);
+  white-space: nowrap;
+}
+td {
+  font-family: var(--f-mono);
+  font-size: 0.68rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface-hi); }
+
+/* ─── Badges ─── */
+.badge {
+  display: inline-block;
+  padding: 0.12rem 0.5rem;
+  font-family: var(--f-mono);
+  font-size: 0.52rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.badge-buy    { background: rgba(52,211,153,0.1);  color: var(--green); }
+.badge-sell   { background: rgba(255,48,85,0.1);   color: var(--red); }
+.badge-hold   { background: rgba(251,191,36,0.1);  color: var(--yellow); }
+.badge-ok     { background: rgba(52,211,153,0.1);  color: var(--green); }
+.badge-fail   { background: rgba(255,48,85,0.1);   color: var(--red); }
+.badge-forced { background: rgba(192,128,30,0.12); color: var(--amber-text); }
+
+/* ─── Score ─── */
+.score { font-weight: 700; font-variant-numeric: tabular-nums; }
+.score-high { color: var(--green); }
+.score-mid  { color: var(--yellow); }
+.score-low  { color: var(--text-faint); }
+
+/* ─── Cooldown bar ─── */
+.cooldown-bar {
+  background: var(--surface-2);
+  height: 4px; overflow: hidden;
+  margin-top: 0.3rem;
+}
+.cooldown-fill {
+  height: 100%;
+  background: var(--amber);
+  transition: width 0.3s;
+}
+
+/* ─── Logs ─── */
+pre.logs {
+  background: var(--surface-2);
+  padding: 1.25rem;
+  font-family: var(--f-mono);
+  font-size: 0.62rem;
+  line-height: 1.7;
+  color: var(--text-dim);
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre;
+  letter-spacing: 0.02em;
+}
+
+.empty {
+  color: var(--text-faint);
+  font-family: var(--f-mono);
+  font-size: 0.65rem;
+  font-style: italic;
+  padding: 2rem 1.25rem;
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+
+/* ─── Refresh button ─── */
+.refresh-btn {
+  position: fixed;
+  bottom: 1.5rem; right: 1.5rem;
+  background: var(--amber);
+  color: var(--bg);
+  border: none;
+  width: 48px; height: 48px;
+  font-size: 1.25rem;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(192,128,30,0.35);
+  transition: transform 0.15s, box-shadow 0.15s;
+  z-index: 100;
+}
+.refresh-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 24px rgba(192,128,30,0.5);
+}
+
+/* ─── Name modal ─── */
+.name-modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(7,7,13,0.75);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(4px);
+}
+.name-modal-overlay.open { display: flex; }
+.name-modal {
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  padding: 2rem;
+  width: 340px;
+  max-width: 90vw;
+}
+.name-modal h3 {
+  font-family: var(--f-display);
+  font-size: 1.4rem;
+  font-weight: 300;
+  margin-bottom: 1rem;
+  color: var(--text);
+}
+.name-modal input {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-hi);
+  color: var(--text);
+  font-family: var(--f-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  outline: none;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s;
+}
+.name-modal input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-glow); }
+.name-modal-btns { display: flex; gap: 0.6rem; justify-content: flex-end; }
+.name-modal-btns button {
+  padding: 0.45rem 1rem;
+  border: none;
+  font-family: var(--f-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-save   { background: var(--amber); color: var(--bg); }
+.btn-save:hover { background: var(--amber-bright); }
+.btn-cancel { background: var(--surface-2); color: var(--text-dim); }
+.btn-cancel:hover { background: var(--surface-hi); }
+
+/* ─── Footer ─── */
+.foot {
+  margin-top: 3rem;
+  padding: 2rem var(--pad-x);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.foot__inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.foot__left, .foot__right {
+  font-family: var(--f-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.foot__right { transition: color 0.2s; }
+.foot__right:hover { color: var(--amber-text); }
+.foot__copy {
+  width: 100%;
+  text-align: center;
+  font-family: var(--f-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 520px) {
+  .nav__title { font-size: 0.5rem; }
+  .nav__right { gap: 0.5rem; }
+  .nav__greeting { display: none; }
+  .foot__inner { flex-direction: column; text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<div class="reg reg--tl" aria-hidden="true"></div>
+<div class="reg reg--tr" aria-hidden="true"></div>
+<div class="reg reg--bl" aria-hidden="true"></div>
+<div class="reg reg--br" aria-hidden="true"></div>
+
+<!-- Name modal -->
+<div class="name-modal-overlay" id="nameModal">
+  <div class="name-modal">
+    <h3>Set your name</h3>
+    <input type="text" id="nameInput" placeholder="Enter your name…" maxlength="40" autocomplete="off">
+    <div class="name-modal-btns">
+      <button class="btn-cancel" id="nameCancel">Cancel</button>
+      <button class="btn-save" id="nameSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav__inner">
+    <span class="nav__title"><b>PORTFOLIO MONITOR</b> <span style="color:var(--text-faint);margin:0 0.4em;">//</span> SMART PORTFOLIO SENTINEL</span>
+    <div class="nav__right">
+      <span class="nav__greeting" id="greeting"></span>
+      <button class="edit-name-btn" id="editNameBtn" title="Edit name">&#9998;</button>
+      <a class="nav__link" href="index.html">← Landing Page</a>
+    </div>
+  </div>
+</nav>
+
+<div class="dash">
+
+  <!-- Header -->
+  <div class="dash__header">
+    <p class="dash__tag">§ Dashboard · Live View</p>
+    <h1 class="dash__title">Portfolio <em>Monitor</em>.</h1>
+    <p class="dash__subtitle" id="lastRefreshed">Last refreshed: —</p>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat__value" id="statScans">0</div>
+      <div class="stat__label">Total Scans</div>
+    </div>
+    <div class="stat">
+      <div class="stat__value" id="statAlerts">0</div>
+      <div class="stat__label">Alerts Sent</div>
+    </div>
+    <div class="stat">
+      <div class="stat__value" id="statCooldowns">0</div>
+      <div class="stat__label">Active Cooldowns</div>
+    </div>
+    <div class="stat">
+      <div class="stat__value" id="statTickers">0</div>
+      <div class="stat__label">Tickers Tracked</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Recent Scans -->
+    <div class="card">
+      <div class="card__head">
+        <span class="card__dot"></span>
+        <span class="card__title">Recent Scans</span>
+      </div>
+      <div class="card__body">
+        <table>
+          <thead><tr><th>Time</th><th>Market</th><th>Tickers</th><th>Alerts</th><th>Errors</th></tr></thead>
+          <tbody id="scansBody">
+            <tr><td colspan="5"><div class="empty">Waiting for scan data…</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Active Cooldowns -->
+    <div class="card">
+      <div class="card__head">
+        <span class="card__dot"></span>
+        <span class="card__title">Active Cooldowns</span>
+      </div>
+      <div class="card__body">
+        <table>
+          <thead><tr><th>Ticker</th><th>Side</th><th>Alerted At</th><th>Remaining</th></tr></thead>
+          <tbody id="cooldownsBody">
+            <tr><td colspan="4"><div class="empty">No active cooldowns.</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Latest Scan Results -->
+  <div class="card card--full" style="margin-bottom:1.5rem;">
+    <div class="card__head">
+      <span class="card__dot"></span>
+      <span class="card__title" id="scanResultsTitle">Latest Scan Results</span>
+    </div>
+    <div class="card__body">
+      <table>
+        <thead><tr><th>Ticker</th><th>Name</th><th>Close</th><th>RSI</th><th>vs SMA200</th><th>Buy</th><th>Sell</th></tr></thead>
+        <tbody id="resultsBody">
+          <tr><td colspan="7"><div class="empty">No scan results yet.</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alert History -->
+  <div class="card card--full" style="margin-bottom:1.5rem;">
+    <div class="card__head">
+      <span class="card__dot"></span>
+      <span class="card__title">Alert History</span>
+    </div>
+    <div class="card__body">
+      <table>
+        <thead><tr><th>Time</th><th>Ticker</th><th>Side</th><th>Score</th><th>Indicators</th><th>AI</th><th>Sent</th></tr></thead>
+        <tbody id="alertsBody">
+          <tr><td colspan="7"><div class="empty">No alerts sent yet.</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recent Logs -->
+  <div class="card card--full">
+    <div class="card__head">
+      <span class="card__dot"></span>
+      <span class="card__title">Recent Logs</span>
+    </div>
+    <div class="card__body">
+      <pre class="logs" id="logsContent">No log entries yet.</pre>
+    </div>
+  </div>
+
+</div>
+
+<button class="refresh-btn" onclick="location.reload()" title="Refresh">&#x21bb;</button>
+
+<!-- Footer -->
+<footer class="foot">
+  <div class="foot__inner">
+    <span class="foot__left">Built with Claude Code</span>
+    <a class="foot__right" href="https://www.linkedin.com/in/ariel-guralnick-b01802206/" target="_blank" rel="noopener">→ Ariel Guralnick / LinkedIn</a>
+  </div>
+  <p class="foot__copy">© 2026 Ariel Guralnick — All rights reserved. For educational purposes only. Not financial advice.</p>
+</footer>
+
+<script>
+(function() {
+  "use strict";
+
+  /* ── Name / greeting ── */
+  const KEY = 'portfolio_user_name';
+  const greetingEl = document.getElementById('greeting');
+  const editBtn    = document.getElementById('editNameBtn');
+  const modal      = document.getElementById('nameModal');
+  const nameInput  = document.getElementById('nameInput');
+  const saveBtn    = document.getElementById('nameSave');
+  const cancelBtn  = document.getElementById('nameCancel');
+
+  function updateGreeting() {
+    const name = localStorage.getItem(KEY);
+    if (name) {
+      greetingEl.textContent = 'Welcome back, ' + name;
+      editBtn.innerHTML = '&#9998;';
+      editBtn.title = 'Change name';
+    } else {
+      greetingEl.textContent = '';
+      editBtn.innerHTML = '&#9998; SET NAME';
+      editBtn.title = 'Set your name';
+    }
+  }
+
+  function openModal() {
+    nameInput.value = localStorage.getItem(KEY) || '';
+    modal.classList.add('open');
+    setTimeout(function() { nameInput.focus(); }, 50);
+  }
+  function closeModal() { modal.classList.remove('open'); }
+  function saveName() {
+    var val = nameInput.value.trim();
+    if (val) { localStorage.setItem(KEY, val); } else { localStorage.removeItem(KEY); }
+    closeModal();
+    updateGreeting();
+    injectNameIntoLogs();
+  }
+
+  editBtn.addEventListener('click', openModal);
+  cancelBtn.addEventListener('click', closeModal);
+  saveBtn.addEventListener('click', saveName);
+  nameInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') saveName();
+    if (e.key === 'Escape') closeModal();
+  });
+  modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+
+  updateGreeting();
+
+  /* ── Log name injection ── */
+  function injectNameIntoLogs() {
+    var name = localStorage.getItem(KEY);
+    var logPre = document.getElementById('logsContent');
+    if (name && logPre && logPre.textContent !== 'No log entries yet.') {
+      var ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      var line = '[INFO] User ' + name + ' initiated scan view at ' + ts + '\n';
+      if (!logPre.textContent.startsWith('[INFO] User ')) {
+        logPre.textContent = line + logPre.textContent;
+      }
+    }
+  }
+
+  /* ── Demo data — populates the dashboard with sample data for preview ── */
+  var now = new Date();
+  document.getElementById('lastRefreshed').textContent =
+    'Last refreshed: ' + now.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+
+  var demoScans = [
+    { time: '2026-04-12 09:41', market: 'OPEN', tickers: 12, alerts: 2, errors: 0 },
+    { time: '2026-04-12 08:30', market: 'PRE-MARKET', tickers: 12, alerts: 0, errors: 0 },
+    { time: '2026-04-11 15:55', market: 'OPEN', tickers: 12, alerts: 1, errors: 0 },
+    { time: '2026-04-11 12:00', market: 'OPEN', tickers: 12, alerts: 0, errors: 1 },
+    { time: '2026-04-10 09:45', market: 'OPEN', tickers: 12, alerts: 3, errors: 0 },
+  ];
+
+  var demoResults = [
+    { ticker: 'NVDA',    name: 'NVIDIA Corp',     close: 874.21, rsi: 58.2, sma: 12.4,  buy: 1, sell: 0 },
+    { ticker: 'AAPL',    name: 'Apple Inc',        close: 218.47, rsi: 42.1, sma: -2.1,  buy: 2, sell: 1 },
+    { ticker: 'TSLA',    name: 'Tesla Inc',        close: 241.88, rsi: 31.4, sma: 8.7,   buy: 4, sell: 0 },
+    { ticker: 'AMZN',    name: 'Amazon.com',       close: 187.92, rsi: 72.3, sma: -4.2,  buy: 0, sell: 3 },
+    { ticker: 'MSFT',    name: 'Microsoft Corp',   close: 432.06, rsi: 55.0, sma: 5.1,   buy: 1, sell: 1 },
+    { ticker: 'GOOG',    name: 'Alphabet Inc',     close: 164.30, rsi: 48.8, sma: 1.3,   buy: 1, sell: 0 },
+    { ticker: 'META',    name: 'Meta Platforms',    close: 496.15, rsi: 62.4, sma: 9.8,   buy: 2, sell: 0 },
+    { ticker: 'ELAL.TA', name: 'EL AL Israel',     close: 682.40, rsi: 38.5, sma: 15.2,  buy: 3, sell: 0 },
+    { ticker: 'AMD',     name: 'AMD Inc',          close: 158.23, rsi: 28.9, sma: -6.3,  buy: 3, sell: 0 },
+    { ticker: 'ORCL',    name: 'Oracle Corp',      close: 137.58, rsi: 71.5, sma: -1.8,  buy: 0, sell: 2 },
+  ];
+
+  var demoAlerts = [
+    { time: '2026-04-12 09:41', ticker: 'TSLA', side: 'BUY',  score: 4, indicators: 'SMA200·RSI·MACD·BB', ai: 'BUY',  sent: true },
+    { time: '2026-04-12 09:41', ticker: 'AMZN', side: 'SELL', score: 3, indicators: 'SMA200·RSI·MACD',    ai: 'HOLD', sent: true },
+    { time: '2026-04-11 15:55', ticker: 'AMD',  side: 'BUY',  score: 3, indicators: 'RSI·MACD·BB',        ai: 'BUY',  sent: true },
+    { time: '2026-04-10 09:45', ticker: 'ELAL.TA', side: 'BUY', score: 3, indicators: 'SMA200·RSI·BB',    ai: 'BUY',  sent: true },
+  ];
+
+  var demoLogs = [
+    '2026-04-12 09:41:12 [INFO] Starting portfolio scan…',
+    '2026-04-12 09:41:13 [INFO] Loaded 12 tickers from portfolio.xlsx',
+    '2026-04-12 09:41:14 [INFO] Market status: OPEN',
+    '2026-04-12 09:41:18 [INFO] TSLA — BUY score 4/4 (SMA200·RSI·MACD·BB)',
+    '2026-04-12 09:41:19 [INFO] Fetching headlines for TSLA…',
+    '2026-04-12 09:41:22 [INFO] Claude verdict for TSLA: BUY',
+    '2026-04-12 09:41:23 [INFO] WhatsApp alert sent for TSLA BUY',
+    '2026-04-12 09:41:25 [INFO] AMZN — SELL score 3/4 (SMA200·RSI·MACD)',
+    '2026-04-12 09:41:27 [INFO] Claude verdict for AMZN: HOLD',
+    '2026-04-12 09:41:28 [WARNING] AI disagrees with technical signal for AMZN',
+    '2026-04-12 09:41:29 [INFO] WhatsApp alert sent for AMZN SELL',
+    '2026-04-12 09:41:32 [INFO] Scan complete. 2 alerts sent. Next scan in 60s.',
+  ];
+
+  /* Populate stats */
+  document.getElementById('statScans').textContent = '5';
+  document.getElementById('statAlerts').textContent = '4';
+  document.getElementById('statCooldowns').textContent = '2';
+  document.getElementById('statTickers').textContent = '12';
+
+  /* Populate scans table */
+  var scansHtml = '';
+  demoScans.forEach(function(s) {
+    scansHtml += '<tr><td>' + s.time + '</td><td>' + s.market + '</td><td>' + s.tickers + '</td><td>' + s.alerts + '</td><td>' + (s.errors ? '<span style="color:var(--red)">' + s.errors + '</span>' : '0') + '</td></tr>';
+  });
+  document.getElementById('scansBody').innerHTML = scansHtml;
+
+  /* Populate results table */
+  document.getElementById('scanResultsTitle').textContent = 'Latest Scan Results — 2026-04-12 09:41 UTC';
+  var resHtml = '';
+  demoResults.forEach(function(r) {
+    var rsiColor = r.rsi < 35 ? 'var(--green)' : r.rsi > 70 ? 'var(--red)' : '';
+    var smaColor = r.sma > 0 ? 'var(--green)' : 'var(--red)';
+    var buyClass = r.buy >= 3 ? 'score-high' : r.buy >= 2 ? 'score-mid' : 'score-low';
+    var sellClass = r.sell >= 3 ? 'score-high' : r.sell >= 2 ? 'score-mid' : 'score-low';
+    resHtml += '<tr>'
+      + '<td><strong style="color:var(--amber-text)">' + r.ticker + '</strong></td>'
+      + '<td>' + r.name + '</td>'
+      + '<td>$' + r.close.toFixed(2) + '</td>'
+      + '<td><span' + (rsiColor ? ' style="color:' + rsiColor + '"' : '') + '>' + r.rsi.toFixed(1) + '</span></td>'
+      + '<td><span style="color:' + smaColor + '">' + (r.sma > 0 ? '+' : '') + r.sma.toFixed(1) + '%</span></td>'
+      + '<td><span class="score ' + buyClass + '">' + r.buy + '/4</span></td>'
+      + '<td><span class="score ' + sellClass + '">' + r.sell + '/4</span></td>'
+      + '</tr>';
+  });
+  document.getElementById('resultsBody').innerHTML = resHtml;
+
+  /* Populate alerts table */
+  var alertHtml = '';
+  demoAlerts.forEach(function(a) {
+    var sideClass = a.side === 'BUY' ? 'badge-buy' : 'badge-sell';
+    var aiClass = a.ai === 'BUY' ? 'badge-buy' : a.ai === 'SELL' ? 'badge-sell' : 'badge-hold';
+    alertHtml += '<tr>'
+      + '<td>' + a.time + '</td>'
+      + '<td><strong style="color:var(--amber-text)">' + a.ticker + '</strong></td>'
+      + '<td><span class="badge ' + sideClass + '">' + a.side + '</span></td>'
+      + '<td class="score">' + a.score + '/4</td>'
+      + '<td>' + a.indicators + '</td>'
+      + '<td><span class="badge ' + aiClass + '">' + a.ai + '</span></td>'
+      + '<td><span class="badge ' + (a.sent ? 'badge-ok">OK' : 'badge-fail">FAIL') + '</span></td>'
+      + '</tr>';
+  });
+  document.getElementById('alertsBody').innerHTML = alertHtml;
+
+  /* Populate logs */
+  document.getElementById('logsContent').textContent = demoLogs.join('\n');
+
+  injectNameIntoLogs();
+
+  /* Auto-refresh every 60s */
+  setTimeout(function() { location.reload(); }, 60000);
+
+})();
+</script>
+</body>
+</html>
