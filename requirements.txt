@@ -1,4 +1,5 @@
 pandas>=2.0
+pyyaml>=6.0
 numpy
 openpyxl
 yfinance>=0.2.40

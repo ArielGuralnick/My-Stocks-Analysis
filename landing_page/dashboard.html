@@ -409,6 +409,156 @@ pre.logs {
 .btn-cancel { background: var(--surface-2); color: var(--text-dim); }
 .btn-cancel:hover { background: var(--surface-hi); }
 
+/* ─── Upload modal ─── */
+.upload-modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(7,7,13,0.78);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(4px);
+}
+.upload-modal-overlay.open { display: flex; }
+.upload-modal {
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  padding: 2rem;
+  width: 400px;
+  max-width: 92vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  transition: width 0.2s;
+}
+.upload-modal.mapping-mode { width: 500px; }
+.upload-modal h3 {
+  font-family: var(--f-display);
+  font-size: 1.35rem;
+  font-weight: 300;
+  margin-bottom: 0.5rem;
+  color: var(--text);
+}
+.upload-modal p {
+  font-family: var(--f-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin-bottom: 1.25rem;
+  line-height: 1.7;
+}
+.upload-drop-zone {
+  border: 1px dashed var(--border-hi);
+  padding: 1.75rem 1.25rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 0.75rem;
+}
+.upload-drop-zone:hover, .upload-drop-zone.drag-over {
+  border-color: var(--amber);
+  background: var(--amber-glow);
+}
+.upload-drop-zone input[type="file"] { display: none; }
+.upload-drop-label {
+  font-family: var(--f-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.upload-drop-label span {
+  color: var(--amber-text);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.upload-file-name {
+  font-family: var(--f-mono);
+  font-size: 0.62rem;
+  color: var(--green);
+  margin-top: 0.5rem;
+  min-height: 1rem;
+  letter-spacing: 0.02em;
+}
+.upload-status {
+  font-family: var(--f-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  margin-top: 0.5rem;
+  min-height: 1rem;
+}
+.upload-status.ok  { color: var(--green); }
+.upload-status.err { color: var(--red); }
+.upload-modal-btns {
+  display: flex; gap: 0.6rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+.upload-modal-btns button {
+  padding: 0.45rem 1rem;
+  border: none;
+  font-family: var(--f-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-upload        { background: var(--amber); color: var(--bg); }
+.btn-upload:hover  { background: var(--amber-bright); }
+.btn-upload:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ─── Ticker mapping wizard ─── */
+.mapping-intro strong { color: var(--yellow); }
+.mapping-scroll {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 0.75rem;
+  padding-right: 0.25rem;
+}
+.mapping-row {
+  display: grid;
+  grid-template-columns: 1fr auto 130px;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.mapping-row:last-child { border-bottom: none; }
+.mapping-name {
+  font-family: var(--f-mono);
+  font-size: 0.62rem;
+  color: var(--text);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mapping-arrow { color: var(--amber); font-size: 0.75rem; }
+.mapping-input {
+  padding: 0.32rem 0.55rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-hi);
+  color: var(--text);
+  font-family: var(--f-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+.mapping-input:focus { border-color: var(--amber); box-shadow: 0 0 0 2px var(--amber-glow); }
+.mapping-input::placeholder { text-transform: none; color: var(--text-faint); opacity: 1; }
+.mapping-skip-note {
+  font-family: var(--f-mono);
+  font-size: 0.55rem;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+  font-style: italic;
+}
+
 /* ─── Footer ─── */
 .foot {
   margin-top: 3rem;
@@ -462,6 +612,48 @@ pre.logs {
 <div class="reg reg--bl" aria-hidden="true"></div>
 <div class="reg reg--br" aria-hidden="true"></div>
 
+<!-- Upload Excel modal (two-panel: file picker → ticker mapping wizard) -->
+<div class="upload-modal-overlay" id="uploadModal">
+  <div class="upload-modal" id="uploadModalInner">
+
+    <!-- Panel 1: file picker -->
+    <div id="uploadPanel">
+      <h3>Upload Portfolio Excel</h3>
+      <p>Upload your Excel export from Excellence brokerage.<br>
+         The file will be saved and the next scan will use it automatically.</p>
+      <div class="upload-drop-zone" id="uploadDropZone">
+        <input type="file" id="uploadFileInput" accept=".xlsx,.xls">
+        <div class="upload-drop-label">
+          Drag &amp; drop your file here, or <span id="uploadBrowse">browse</span>
+        </div>
+        <div class="upload-file-name" id="uploadFileName"></div>
+      </div>
+      <div class="upload-status" id="uploadStatus"></div>
+      <div class="upload-modal-btns">
+        <button class="btn-cancel" id="uploadCancel">Cancel</button>
+        <button class="btn-upload" id="uploadSubmit" disabled>Upload</button>
+      </div>
+    </div>
+
+    <!-- Panel 2: ticker mapping wizard -->
+    <div id="mappingPanel" style="display:none">
+      <h3>Map New Stocks</h3>
+      <p class="mapping-intro">
+        These stocks from your Excel have no Yahoo Finance ticker yet.<br>
+        Enter the symbol for each one. <strong>Leave blank to skip</strong> a stock.
+      </p>
+      <div class="mapping-scroll" id="mappingRows"></div>
+      <p class="mapping-skip-note">Tip: find tickers at finance.yahoo.com — e.g. AAPL, NVDA, CSPX.L</p>
+      <div class="upload-status" id="mappingStatus"></div>
+      <div class="upload-modal-btns">
+        <button class="btn-cancel" id="mappingCancel">Cancel</button>
+        <button class="btn-upload" id="mappingSubmit">Save &amp; Continue</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- Name modal -->
 <div class="name-modal-overlay" id="nameModal">
   <div class="name-modal">
@@ -481,6 +673,7 @@ pre.logs {
     <div class="nav__right">
       <span class="nav__greeting" id="greeting"></span>
       <button class="edit-name-btn" id="editNameBtn" title="Edit name">&#9998;</button>
+      <button class="edit-name-btn" id="uploadBtn" title="Upload Excel portfolio file">&#8679; UPLOAD EXCEL</button>
       <a class="nav__link" href="index.html">← Landing Page</a>
     </div>
   </div>
@@ -774,6 +967,204 @@ pre.logs {
 
   /* Auto-refresh every 60s */
   setTimeout(function() { location.reload(); }, 60000);
+
+  /* ── Upload Excel / Ticker Mapping Wizard ─────────────────────────────── */
+  (function() {
+
+    // ⬇ Set this to your Render URL once deployed, e.g.:
+    // const BACKEND_URL = 'https://portfolio-sentinel-dashboard.onrender.com';
+    const BACKEND_URL = '';
+
+    const overlay      = document.getElementById('uploadModal');
+    const modalInner   = document.getElementById('uploadModalInner');
+    const openBtn      = document.getElementById('uploadBtn');
+
+    // Panel 1
+    const uploadPanel  = document.getElementById('uploadPanel');
+    const cancelBtn    = document.getElementById('uploadCancel');
+    const submitBtn    = document.getElementById('uploadSubmit');
+    const fileInput    = document.getElementById('uploadFileInput');
+    const dropZone     = document.getElementById('uploadDropZone');
+    const fileNameEl   = document.getElementById('uploadFileName');
+    const statusEl     = document.getElementById('uploadStatus');
+    const browseLink   = document.getElementById('uploadBrowse');
+
+    // Panel 2
+    const mappingPanel  = document.getElementById('mappingPanel');
+    const mappingRows   = document.getElementById('mappingRows');
+    const mappingStatus = document.getElementById('mappingStatus');
+    const mappingCancel = document.getElementById('mappingCancel');
+    const mappingSubmit = document.getElementById('mappingSubmit');
+
+    var selectedFile = null;
+    var pendingPath  = null;
+
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function showPanel(name) {
+      uploadPanel.style.display  = name === 'upload'  ? '' : 'none';
+      mappingPanel.style.display = name === 'mapping' ? '' : 'none';
+      if (name === 'mapping') { modalInner.classList.add('mapping-mode'); }
+      else                    { modalInner.classList.remove('mapping-mode'); }
+    }
+
+    function resetUploadPanel() {
+      selectedFile = null; pendingPath = null;
+      fileInput.value = ''; fileNameEl.textContent = '';
+      statusEl.textContent = ''; statusEl.className = 'upload-status';
+      submitBtn.disabled = true;
+    }
+
+    function openModal() {
+      if (!BACKEND_URL) {
+        alert('Backend not deployed yet.\nDeploy the dashboard on Render first, then set BACKEND_URL in dashboard.html.');
+        return;
+      }
+      resetUploadPanel();
+      showPanel('upload');
+      overlay.classList.add('open');
+    }
+
+    function closeModal() {
+      overlay.classList.remove('open');
+      resetUploadPanel();
+      mappingRows.innerHTML = '';
+      mappingStatus.textContent = ''; mappingStatus.className = 'upload-status';
+      mappingSubmit.disabled = false;
+      showPanel('upload');
+    }
+
+    function setFile(file) {
+      if (!file) return;
+      var ext = file.name.split('.').pop().toLowerCase();
+      if (ext !== 'xlsx' && ext !== 'xls') {
+        statusEl.textContent = 'Only .xlsx or .xls files are allowed.';
+        statusEl.className = 'upload-status err';
+        submitBtn.disabled = true;
+        return;
+      }
+      selectedFile = file;
+      fileNameEl.textContent = file.name;
+      statusEl.textContent = ''; statusEl.className = 'upload-status';
+      submitBtn.disabled = false;
+    }
+
+    openBtn.addEventListener('click', openModal);
+    cancelBtn.addEventListener('click', closeModal);
+    browseLink.addEventListener('click', function() { fileInput.click(); });
+    dropZone.addEventListener('click', function(e) { if (e.target !== browseLink) fileInput.click(); });
+    fileInput.addEventListener('change', function() { setFile(fileInput.files[0]); });
+    dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('drag-over'); });
+    dropZone.addEventListener('drop', function(e) {
+      e.preventDefault(); dropZone.classList.remove('drag-over'); setFile(e.dataTransfer.files[0]);
+    });
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
+
+    submitBtn.addEventListener('click', function() {
+      if (!selectedFile) return;
+      var formData = new FormData();
+      formData.append('file', selectedFile);
+      submitBtn.disabled = true;
+      statusEl.textContent = 'Uploading and reading portfolio…';
+      statusEl.className = 'upload-status';
+
+      fetch(BACKEND_URL + '/upload', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.ok) {
+            statusEl.textContent = 'Error: ' + (data.error || 'Unknown error');
+            statusEl.className = 'upload-status err';
+            submitBtn.disabled = false;
+            return;
+          }
+          if (data.needs_mapping) {
+            pendingPath = data.path;
+            buildMappingRows(data.unmapped);
+            showPanel('mapping');
+          } else {
+            statusEl.textContent = 'Uploaded! The next scan will use this file.';
+            statusEl.className = 'upload-status ok';
+            setTimeout(closeModal, 2000);
+          }
+        })
+        .catch(function() {
+          statusEl.textContent = 'Upload failed. Is the backend running?';
+          statusEl.className = 'upload-status err';
+          submitBtn.disabled = false;
+        });
+    });
+
+    function buildMappingRows(unmapped) {
+      mappingRows.innerHTML = '';
+      unmapped.forEach(function(name) {
+        var row = document.createElement('div');
+        row.className = 'mapping-row';
+        row.innerHTML =
+          '<span class="mapping-name" title="' + escHtml(name) + '">' + escHtml(name) + '</span>' +
+          '<span class="mapping-arrow">&rarr;</span>' +
+          '<input class="mapping-input" type="text" data-name="' + escHtml(name) + '" ' +
+                 'placeholder="e.g. AAPL" autocomplete="off" spellcheck="false">';
+        mappingRows.appendChild(row);
+      });
+      setTimeout(function() {
+        var first = mappingRows.querySelector('.mapping-input');
+        if (first) first.focus();
+      }, 80);
+    }
+
+    mappingCancel.addEventListener('click', closeModal);
+
+    mappingSubmit.addEventListener('click', function() {
+      var inputs = mappingRows.querySelectorAll('.mapping-input');
+      var mappings = {};
+      inputs.forEach(function(inp) {
+        var ticker = inp.value.trim().toUpperCase();
+        if (ticker) mappings[inp.dataset.name] = ticker;
+      });
+      mappingStatus.textContent = 'Saving ticker mappings…';
+      mappingStatus.className = 'upload-status';
+      mappingSubmit.disabled = true;
+
+      fetch(BACKEND_URL + '/update_ticker_map', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mappings: mappings, path: pendingPath })
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.ok) {
+            var added = data.added || 0;
+            mappingStatus.textContent = (added ? added + ' ticker(s) saved. ' : '') +
+              'File is ready for the next scan.';
+            mappingStatus.className = 'upload-status ok';
+            setTimeout(closeModal, 2500);
+          } else {
+            mappingStatus.textContent = 'Error: ' + (data.error || 'Unknown error');
+            mappingStatus.className = 'upload-status err';
+            mappingSubmit.disabled = false;
+          }
+        })
+        .catch(function() {
+          mappingStatus.textContent = 'Request failed. Is the backend running?';
+          mappingStatus.className = 'upload-status err';
+          mappingSubmit.disabled = false;
+        });
+    });
+
+    mappingRows.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter') return;
+      var inputs = Array.from(mappingRows.querySelectorAll('.mapping-input'));
+      var idx = inputs.indexOf(document.activeElement);
+      if (idx >= 0 && idx < inputs.length - 1) { inputs[idx + 1].focus(); }
+      else { mappingSubmit.click(); }
+    });
+
+  }());
 
 })();
 </script>

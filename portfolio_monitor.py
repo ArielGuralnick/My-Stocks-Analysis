@@ -71,6 +71,7 @@ except ImportError:  # pragma: no cover
 
 import pandas as pd
 import requests
+import yaml
 import yfinance as yf
 from dotenv import load_dotenv
 from ta.momentum import RSIIndicator
@@ -85,6 +86,20 @@ BASE_DIR = Path(__file__).resolve().parent
 
 load_dotenv(BASE_DIR / ".env", override=True)
 
+# Load user config (config.yaml) — non-secret settings live here.
+def _load_config() -> dict:
+    cfg_path = BASE_DIR / "config.yaml"
+    if cfg_path.exists():
+        try:
+            with cfg_path.open("r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except Exception as e:
+            print(f"[WARNING] Could not load config.yaml: {e}", file=sys.stderr)
+    return {}
+
+_cfg = _load_config()
+_cfg_excel = _cfg.get("excel", {})
+
 # Green API (WhatsApp)
 GREEN_API_ID_INSTANCE = os.getenv("GREEN_API_ID_INSTANCE")
 GREEN_API_TOKEN_INSTANCE = os.getenv("GREEN_API_TOKEN_INSTANCE")
@@ -94,7 +109,8 @@ WHATSAPP_PHONE_NUMBER = os.getenv("WHATSAPP_PHONE_NUMBER")  # e.g. 972501234567
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
-EXCEL_FILE = os.getenv("EXCEL_FILE", "")
+# Excel settings: config.yaml > .env > auto-detect
+EXCEL_FILE = _cfg_excel.get("file") or os.getenv("EXCEL_FILE", "")
 if not EXCEL_FILE:
     # Fallback: look for the most recent Excellence_*.xlsx in Downloads
     _downloads = Path.home() / "Downloads"
@@ -102,8 +118,8 @@ if not EXCEL_FILE:
     if _candidates:
         EXCEL_FILE = str(_candidates[0])
 
-TICKER_COLUMN = os.getenv("TICKER_COLUMN", "שם נייר")  # Column holding the security name
-HEADER_ROW = int(os.getenv("HEADER_ROW", "9"))          # 0-indexed row where headers are
+TICKER_COLUMN = _cfg_excel.get("ticker_column") or os.getenv("TICKER_COLUMN", "שם נייר")
+HEADER_ROW = int(_cfg_excel.get("header_row") if _cfg_excel.get("header_row") is not None else os.getenv("HEADER_ROW", "9"))
 CHECK_INTERVAL_SECONDS = 2 * 60 * 60   # 2 hours (continuous mode)
 
 DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))
@@ -121,7 +137,8 @@ NEWS_HEADLINE_LIMIT = 5
 TECHNICAL_SCORE_THRESHOLD = 3          # ≥ 3 of 4 indicators must fire
 
 # Portfolio names (as they appear in the Excel) → Yahoo Finance tickers.
-TICKER_MAP: dict[str, str] = {
+# Loaded from config.yaml; falls back to hardcoded defaults if not set.
+_DEFAULT_TICKER_MAP: dict[str, str] = {
     "AMAZON COM INC": "AMZN",
     "APPLE COMPUTER": "AAPL",
     "BITB": "BITB",
@@ -137,6 +154,7 @@ TICKER_MAP: dict[str, str] = {
     "ISHARES CORE S&P 500 UCITS ETF": "CSPX.L",
     "ISHARES NASDAQ 100 UCITS ETF": "CNDX.L",
 }
+TICKER_MAP: dict[str, str] = _cfg.get("ticker_map") or _DEFAULT_TICKER_MAP
 
 # Rough US market holidays (NYSE full closures). Not exhaustive across years;
 # extend as needed. Dates are ISO (YYYY-MM-DD) in America/New_York.

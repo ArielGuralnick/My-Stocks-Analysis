@@ -1,0 +1,50 @@
+# ============================================================
+# Portfolio Monitor — User Configuration
+# ============================================================
+# Edit this file to customize the monitor for your portfolio.
+# You do NOT need to touch any Python code.
+#
+# After editing, restart portfolio_monitor.py / dashboard.py.
+# ============================================================
+
+# ------------------------------------------------------------
+# Excel settings
+# ------------------------------------------------------------
+excel:
+  # Full path to your Excel file exported from Excellence brokerage.
+  # Leave empty ("") to auto-detect the latest Excellence_*.xlsx in ~/Downloads.
+  # You can also upload the file directly from the Dashboard (Upload Excel button).
+  file: "C:/Users/ArielGuralnick/Downloads/Excellence_040426.xlsx"
+
+  # Name of the column in the Excel that contains security names.
+  ticker_column: "שם נייר"
+
+  # Row index (0-based) where the header row is located in the Excel sheet.
+  header_row: 9
+
+# ------------------------------------------------------------
+# Ticker map
+# ------------------------------------------------------------
+# Map each security name (exactly as it appears in your Excel) to its
+# Yahoo Finance ticker symbol.
+#
+# How to add a new stock:
+#   1. Open your Excel export and copy the exact name from the "שם נייר" column.
+#   2. Find the Yahoo Finance ticker (e.g. search on finance.yahoo.com).
+#   3. Add a line below:  "EXACT NAME FROM EXCEL": "TICKER"
+# ------------------------------------------------------------
+ticker_map:
+  "AMAZON COM INC": "AMZN"
+  "APPLE COMPUTER": "AAPL"
+  "BITB": "BITB"
+  "IREN LTD": "IREN"
+  "META PLATFORMS INC": "META"
+  "MICROSOFT CORP": "MSFT"
+  "MICROSTRATEGY INC": "MSTR"
+  "NVIDIA CORP": "NVDA"
+  "ORACLE CORPORATION": "ORCL"
+  "TESLA MOTORS INC": "TSLA"
+  "(ISHARES CORE MSCI EUROPE UCITS ETF EUR (ACC": "IMEU.L"
+  "ISHARES CORE MSCI EM IMI UCITS ETF": "EIMI.L"
+  "ISHARES CORE S&P 500 UCITS ETF": "CSPX.L"
+  "ISHARES NASDAQ 100 UCITS ETF": "CNDX.L"
