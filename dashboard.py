@@ -13,10 +13,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from flask import Flask, render_template_string
+import pandas as pd
+import yaml
+from flask import Flask, jsonify, render_template_string, request
+from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).resolve().parent
 # On Render the persistent disk is mounted at /app/data; fall back to project root locally.
@@ -27,7 +31,65 @@ STATE_FILE = DATA_DIR / "signals_state.json"
 LOG_FILE = DATA_DIR / "trading_bot.log"
 COOLDOWN_HOURS = 48
 
+CONFIG_FILE = BASE_DIR / "config.yaml"
+UPLOADS_DIR = BASE_DIR / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
+ALLOWED_EXTENSIONS = {".xlsx", ".xls"}
+
 app = Flask(__name__)
+
+
+def _allowed_file(filename: str) -> bool:
+    return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
+
+
+def _load_config() -> dict:
+    """Return the current config.yaml as a dict (empty dict on any error)."""
+    if CONFIG_FILE.exists():
+        try:
+            with CONFIG_FILE.open("r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except Exception:
+            pass
+    return {}
+
+
+def _save_config(cfg: dict) -> None:
+    """Persist cfg back to config.yaml."""
+    with CONFIG_FILE.open("w", encoding="utf-8") as f:
+        yaml.dump(cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+
+def _update_config_excel_path(file_path: str) -> None:
+    """Write the uploaded file path into config.yaml's excel.file field."""
+    cfg = _load_config()
+    if "excel" not in cfg or not isinstance(cfg.get("excel"), dict):
+        cfg["excel"] = {}
+    cfg["excel"]["file"] = file_path
+    _save_config(cfg)
+
+
+def _normalize(s: str) -> str:
+    """Collapse all whitespace so column names match regardless of spacing."""
+    return re.sub(r"\s+", " ", str(s)).strip()
+
+
+def _extract_excel_names(file_path: str, ticker_column: str, header_row: int) -> list[str]:
+    """Read the Excel and return the list of security names from ticker_column."""
+    df = pd.read_excel(file_path, header=header_row)
+    df.columns = [_normalize(c) for c in df.columns]
+    target = _normalize(ticker_column)
+    if target not in df.columns:
+        raise ValueError(
+            f"Column '{ticker_column}' not found in Excel. "
+            f"Available columns: {list(df.columns)}"
+        )
+    return [str(n).strip() for n in df[target].dropna().tolist()]
+
+
+def _find_unmapped(names: list[str], ticker_map: dict) -> list[str]:
+    """Return names that have no entry in ticker_map."""
+    return [n for n in names if n not in ticker_map]
 
 
 def _load_json(path: Path, default=None):
@@ -99,6 +161,98 @@ def index():
         logs=logs,
         now=datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
     )
+
+
+@app.route("/upload", methods=["POST"])
+def upload_excel():
+    """Save the uploaded Excel, then check for unmapped stock names.
+
+    Returns one of:
+      {"ok": True, "needs_mapping": False, "path": "..."}
+        — all stocks already in ticker_map; config updated, ready to scan.
+      {"ok": True, "needs_mapping": True, "unmapped": [...], "path": "..."}
+        — some stocks have no Yahoo ticker yet; frontend should show the wizard.
+      {"ok": False, "error": "..."}
+        — file rejected or unreadable.
+    """
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "No file part in request"}), 400
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"ok": False, "error": "No file selected"}), 400
+    if not _allowed_file(file.filename):
+        return jsonify({"ok": False, "error": "Only .xlsx / .xls files are allowed"}), 400
+
+    filename = secure_filename(file.filename)
+    dest = UPLOADS_DIR / filename
+    file.save(str(dest))
+    logging.getLogger("dashboard").info("Excel saved: %s", dest)
+
+    cfg = _load_config()
+    cfg_excel = cfg.get("excel") or {}
+    ticker_column = cfg_excel.get("ticker_column") or "שם נייר"
+    header_row = int(cfg_excel.get("header_row") if cfg_excel.get("header_row") is not None else 9)
+    ticker_map = cfg.get("ticker_map") or {}
+
+    try:
+        names = _extract_excel_names(str(dest), ticker_column, header_row)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    unmapped = _find_unmapped(names, ticker_map)
+    if unmapped:
+        return jsonify({
+            "ok": True,
+            "needs_mapping": True,
+            "unmapped": unmapped,
+            "path": str(dest),
+        })
+
+    # All stocks are already mapped — persist the path and we're done.
+    _update_config_excel_path(str(dest))
+    return jsonify({"ok": True, "needs_mapping": False, "path": str(dest)})
+
+
+@app.route("/update_ticker_map", methods=["POST"])
+def update_ticker_map():
+    """Receive new name→ticker mappings, merge them into config.yaml, and
+    record the uploaded Excel path so the next scan uses it.
+
+    Expected JSON body:
+      {
+        "mappings": {"STOCK NAME": "TICK", ...},  // empty values are ignored
+        "path": "/abs/path/to/uploaded.xlsx"
+      }
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"ok": False, "error": "No JSON body"}), 400
+
+    raw_mappings: dict = data.get("mappings") or {}
+    file_path: str = data.get("path", "").strip()
+
+    # Strip whitespace and upper-case the ticker; drop entries with no ticker.
+    clean = {
+        name.strip(): ticker.strip().upper()
+        for name, ticker in raw_mappings.items()
+        if ticker and ticker.strip()
+    }
+
+    cfg = _load_config()
+    if not isinstance(cfg.get("ticker_map"), dict):
+        cfg["ticker_map"] = {}
+    cfg["ticker_map"].update(clean)
+
+    if not isinstance(cfg.get("excel"), dict):
+        cfg["excel"] = {}
+    if file_path:
+        cfg["excel"]["file"] = file_path
+
+    _save_config(cfg)
+    logging.getLogger("dashboard").info(
+        "Ticker map updated: %d new mapping(s) added.", len(clean)
+    )
+    return jsonify({"ok": True, "added": len(clean)})
 
 
 # ---------------------------------------------------------------------------
@@ -344,9 +498,159 @@ pre.logs {
 }
 .btn-save { background: var(--accent); color: #fff; }
 .btn-cancel { background: var(--surface2); color: var(--text-dim); }
+
+/* ── Upload modal ── */
+.upload-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+.upload-modal-overlay.open { display: flex; }
+.upload-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    width: 380px;
+    max-width: 90vw;
+}
+.upload-modal h3 { font-size: 1rem; margin-bottom: 0.5rem; color: var(--text); }
+.upload-modal p { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 1rem; line-height: 1.5; }
+.upload-drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    margin-bottom: 0.75rem;
+}
+.upload-drop-zone:hover, .upload-drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(108,140,255,0.05);
+}
+.upload-drop-zone input[type="file"] { display: none; }
+.upload-drop-label { font-size: 0.82rem; color: var(--text-dim); }
+.upload-drop-label span { color: var(--accent); text-decoration: underline; cursor: pointer; }
+.upload-file-name { font-size: 0.78rem; color: var(--green); margin-top: 0.4rem; min-height: 1rem; }
+.upload-status { font-size: 0.78rem; margin-top: 0.5rem; min-height: 1rem; }
+.upload-status.ok { color: var(--green); }
+.upload-status.err { color: var(--red); }
+.upload-modal-btns { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; }
+.upload-modal-btns button {
+    padding: 0.35rem 0.85rem;
+    border-radius: 5px;
+    border: none;
+    font-size: 0.8rem;
+    cursor: pointer;
+    font-family: inherit;
+}
+.btn-upload { background: var(--accent); color: #fff; }
+.btn-upload:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Ticker mapping wizard (shown inside upload modal) ── */
+.upload-modal.mapping-mode { width: 480px; }
+.mapping-intro {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 1rem;
+    line-height: 1.55;
+}
+.mapping-intro strong { color: var(--yellow); }
+.mapping-scroll {
+    max-height: 280px;
+    overflow-y: auto;
+    margin-bottom: 0.75rem;
+    padding-right: 0.25rem;
+}
+.mapping-row {
+    display: grid;
+    grid-template-columns: 1fr auto 120px;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid var(--border);
+}
+.mapping-row:last-child { border-bottom: none; }
+.mapping-name {
+    font-size: 0.78rem;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mapping-arrow { color: var(--text-dim); font-size: 0.8rem; }
+.mapping-input {
+    padding: 0.3rem 0.5rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-size: 0.82rem;
+    font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+    letter-spacing: 0.04em;
+    outline: none;
+    width: 100%;
+    text-transform: uppercase;
+}
+.mapping-input:focus { border-color: var(--accent); }
+.mapping-input::placeholder { text-transform: none; color: var(--text-dim); opacity: 0.6; }
+.mapping-skip-note {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+    font-style: italic;
+}
 </style>
 </head>
 <body>
+
+<!-- Upload Excel modal (two panels: file picker → mapping wizard) -->
+<div class="upload-modal-overlay" id="uploadModal">
+    <div class="upload-modal" id="uploadModalInner">
+
+        <!-- Panel 1: file picker -->
+        <div id="uploadPanel">
+            <h3>Upload Portfolio Excel</h3>
+            <p>Upload your Excel export from Excellence brokerage.<br>
+               The file will be saved and used for the next scan automatically.</p>
+            <div class="upload-drop-zone" id="uploadDropZone">
+                <input type="file" id="uploadFileInput" accept=".xlsx,.xls">
+                <div class="upload-drop-label">
+                    Drag &amp; drop your file here, or <span id="uploadBrowse">browse</span>
+                </div>
+                <div class="upload-file-name" id="uploadFileName"></div>
+            </div>
+            <div class="upload-status" id="uploadStatus"></div>
+            <div class="upload-modal-btns">
+                <button class="btn-cancel" id="uploadCancel">Cancel</button>
+                <button class="btn-upload" id="uploadSubmit" disabled>Upload</button>
+            </div>
+        </div>
+
+        <!-- Panel 2: ticker mapping wizard (hidden until unmapped stocks found) -->
+        <div id="mappingPanel" style="display:none">
+            <h3>Map New Stocks</h3>
+            <p class="mapping-intro">
+                These stocks from your Excel have no Yahoo Finance ticker yet.<br>
+                Enter the ticker symbol for each one. <strong>Leave blank to skip</strong> a stock
+                (it won't be monitored until you add it later).
+            </p>
+            <div class="mapping-scroll" id="mappingRows"></div>
+            <p class="mapping-skip-note">Tip: find tickers at finance.yahoo.com — e.g. AAPL, NVDA, CSPX.L</p>
+            <div class="upload-status" id="mappingStatus"></div>
+            <div class="upload-modal-btns">
+                <button class="btn-cancel" id="mappingCancel">Cancel</button>
+                <button class="btn-upload" id="mappingSubmit">Save &amp; Continue</button>
+            </div>
+        </div>
+
+    </div>
+</div>
 
 <!-- Name edit modal -->
 <div class="name-modal-overlay" id="nameModal">
@@ -366,7 +670,8 @@ pre.logs {
         <span class="greeting" id="greeting"></span>
         <button class="edit-name-btn" id="editNameBtn" title="Edit name">&#9998; Edit Name</button>
     </div>
-    <div class="header-right">
+    <div class="header-right" style="display:flex;gap:0.5rem;align-items:center;">
+        <button class="edit-name-btn" id="uploadBtn" title="Upload Excel file">&#8679; Upload Excel</button>
         <a href="https://monumental-otter-86ec71.netlify.app" target="_blank" rel="noopener">Landing Page ↗</a>
     </div>
 </div>
@@ -620,6 +925,232 @@ pre.logs {
 
   // Auto-refresh every 60 seconds
   setTimeout(function() { location.reload(); }, 60000);
+})();
+
+// ── Upload Excel modal (two-panel: file picker → ticker mapping wizard) ──
+(function() {
+  const overlay       = document.getElementById('uploadModal');
+  const modalInner    = document.getElementById('uploadModalInner');
+  const openBtn       = document.getElementById('uploadBtn');
+
+  // Panel 1 elements
+  const uploadPanel   = document.getElementById('uploadPanel');
+  const cancelBtn     = document.getElementById('uploadCancel');
+  const submitBtn     = document.getElementById('uploadSubmit');
+  const fileInput     = document.getElementById('uploadFileInput');
+  const dropZone      = document.getElementById('uploadDropZone');
+  const fileNameEl    = document.getElementById('uploadFileName');
+  const statusEl      = document.getElementById('uploadStatus');
+  const browseLink    = document.getElementById('uploadBrowse');
+
+  // Panel 2 elements
+  const mappingPanel  = document.getElementById('mappingPanel');
+  const mappingRows   = document.getElementById('mappingRows');
+  const mappingStatus = document.getElementById('mappingStatus');
+  const mappingCancel = document.getElementById('mappingCancel');
+  const mappingSubmit = document.getElementById('mappingSubmit');
+
+  let selectedFile = null;
+  let pendingPath  = null;   // path returned by /upload when needs_mapping=true
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function showPanel(name) {
+    uploadPanel.style.display  = (name === 'upload')  ? '' : 'none';
+    mappingPanel.style.display = (name === 'mapping') ? '' : 'none';
+    if (name === 'mapping') {
+      modalInner.classList.add('mapping-mode');
+    } else {
+      modalInner.classList.remove('mapping-mode');
+    }
+  }
+
+  function resetUploadPanel() {
+    selectedFile = null;
+    pendingPath  = null;
+    fileInput.value = '';
+    fileNameEl.textContent = '';
+    statusEl.textContent = '';
+    statusEl.className = 'upload-status';
+    submitBtn.disabled = true;
+  }
+
+  function openModal() {
+    resetUploadPanel();
+    showPanel('upload');
+    overlay.classList.add('open');
+  }
+
+  function closeModal() {
+    overlay.classList.remove('open');
+    // Reset both panels so the modal is clean next time
+    resetUploadPanel();
+    mappingRows.innerHTML = '';
+    mappingStatus.textContent = '';
+    mappingStatus.className = 'upload-status';
+    mappingSubmit.disabled = false;
+    showPanel('upload');
+  }
+
+  // ── Panel 1: file picking ────────────────────────────────────────────────
+
+  function setFile(file) {
+    if (!file) return;
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls') {
+      statusEl.textContent = 'Only .xlsx or .xls files are allowed.';
+      statusEl.className = 'upload-status err';
+      submitBtn.disabled = true;
+      return;
+    }
+    selectedFile = file;
+    fileNameEl.textContent = file.name;
+    statusEl.textContent = '';
+    statusEl.className = 'upload-status';
+    submitBtn.disabled = false;
+  }
+
+  openBtn.addEventListener('click', openModal);
+  cancelBtn.addEventListener('click', closeModal);
+  browseLink.addEventListener('click', function() { fileInput.click(); });
+  dropZone.addEventListener('click', function(e) {
+    if (e.target !== browseLink) fileInput.click();
+  });
+  fileInput.addEventListener('change', function() { setFile(fileInput.files[0]); });
+
+  dropZone.addEventListener('dragover', function(e) {
+    e.preventDefault(); dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', function() {
+    dropZone.classList.remove('drag-over');
+  });
+  dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    setFile(e.dataTransfer.files[0]);
+  });
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) closeModal();
+  });
+
+  submitBtn.addEventListener('click', function() {
+    if (!selectedFile) return;
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    submitBtn.disabled = true;
+    statusEl.textContent = 'Uploading and reading portfolio…';
+    statusEl.className = 'upload-status';
+
+    fetch('/upload', { method: 'POST', body: formData })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.ok) {
+          statusEl.textContent = 'Error: ' + (data.error || 'Unknown error');
+          statusEl.className = 'upload-status err';
+          submitBtn.disabled = false;
+          return;
+        }
+        if (data.needs_mapping) {
+          // Transition to the wizard panel
+          pendingPath = data.path;
+          buildMappingRows(data.unmapped);
+          showPanel('mapping');
+        } else {
+          statusEl.textContent = 'Uploaded successfully! The next scan will use this file.';
+          statusEl.className = 'upload-status ok';
+          setTimeout(closeModal, 2000);
+        }
+      })
+      .catch(function() {
+        statusEl.textContent = 'Upload failed. Is the server running?';
+        statusEl.className = 'upload-status err';
+        submitBtn.disabled = false;
+      });
+  });
+
+  // ── Panel 2: mapping wizard ───────────────────────────────────────────────
+
+  function buildMappingRows(unmapped) {
+    mappingRows.innerHTML = '';
+    unmapped.forEach(function(name) {
+      const row = document.createElement('div');
+      row.className = 'mapping-row';
+      row.innerHTML =
+        '<span class="mapping-name" title="' + escHtml(name) + '">' + escHtml(name) + '</span>' +
+        '<span class="mapping-arrow">&rarr;</span>' +
+        '<input class="mapping-input" type="text" data-name="' + escHtml(name) + '" ' +
+               'placeholder="e.g. AAPL" autocomplete="off" spellcheck="false">';
+      mappingRows.appendChild(row);
+    });
+    // Focus first input after short delay
+    setTimeout(function() {
+      var first = mappingRows.querySelector('.mapping-input');
+      if (first) first.focus();
+    }, 80);
+  }
+
+  mappingCancel.addEventListener('click', closeModal);
+
+  mappingSubmit.addEventListener('click', function() {
+    var inputs = mappingRows.querySelectorAll('.mapping-input');
+    var mappings = {};
+    inputs.forEach(function(inp) {
+      var ticker = inp.value.trim().toUpperCase();
+      if (ticker) mappings[inp.dataset.name] = ticker;
+    });
+
+    mappingStatus.textContent = 'Saving ticker mappings…';
+    mappingStatus.className = 'upload-status';
+    mappingSubmit.disabled = true;
+
+    fetch('/update_ticker_map', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mappings: mappings, path: pendingPath })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.ok) {
+          var added = data.added || 0;
+          var skipped = Object.keys(mappings).length === 0
+            ? ' All stocks skipped — add tickers later via config.yaml.'
+            : '';
+          mappingStatus.textContent =
+            (added ? added + ' ticker(s) saved. ' : '') +
+            'File is ready for the next scan.' + skipped;
+          mappingStatus.className = 'upload-status ok';
+          setTimeout(closeModal, 2500);
+        } else {
+          mappingStatus.textContent = 'Error: ' + (data.error || 'Unknown error');
+          mappingStatus.className = 'upload-status err';
+          mappingSubmit.disabled = false;
+        }
+      })
+      .catch(function() {
+        mappingStatus.textContent = 'Request failed. Is the server running?';
+        mappingStatus.className = 'upload-status err';
+        mappingSubmit.disabled = false;
+      });
+  });
+
+  // Tab between mapping inputs with Enter key
+  mappingRows.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    var inputs = Array.from(mappingRows.querySelectorAll('.mapping-input'));
+    var idx = inputs.indexOf(document.activeElement);
+    if (idx >= 0 && idx < inputs.length - 1) {
+      inputs[idx + 1].focus();
+    } else {
+      mappingSubmit.click();
+    }
+  });
 })();
 </script>
 </body>
