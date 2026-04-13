@@ -10,6 +10,10 @@ __pycache__/
 
 # State files (runtime data)
 signals_state.json
+scan_history.json
+
+# Netlify build artifacts
+landing_page/.netlify/
 
 # Excel portfolio file (personal financial data)
 *.xlsx
