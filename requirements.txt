@@ -1,6 +1,6 @@
 pandas>=2.0
 pyyaml>=6.0
-numpy
+numpy<2.0
 openpyxl
 yfinance>=0.2.40
 ta>=0.11.0
