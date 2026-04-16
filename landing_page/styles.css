@@ -1006,8 +1006,14 @@ main {
   color: var(--text-faint);
 }
 .foot__center { color: var(--amber); opacity: 0.45; }
-.foot__right  { transition: color 0.2s; }
-.foot__right:hover { color: var(--amber-text); }
+.foot__right  {
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  color: var(--amber-text);
+  font-weight: 600;
+  transition: color 0.2s;
+}
+.foot__right:hover { color: var(--amber-bright); }
 .foot__fine {
   max-width: var(--max-w);
   margin: 0 auto;

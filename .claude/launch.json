@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "Landing Page",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
       "runtimeArgs": ["-m", "http.server", "8080", "--directory", "landing_page"],
       "port": 8080
     }
