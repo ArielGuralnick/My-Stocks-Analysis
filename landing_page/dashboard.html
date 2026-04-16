@@ -126,11 +126,11 @@ a { color: inherit; text-decoration: none; }
 }
 .nav__link {
   font-family: var(--f-mono);
-  font-size: 0.55rem;
-  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--text-faint);
-  padding: 0.35rem 0.75rem;
+  color: var(--text-dim);
+  padding: 0.38rem 0.85rem;
   border: 1px solid var(--border-hi);
   transition: color 0.2s, border-color 0.2s;
 }
@@ -138,9 +138,9 @@ a { color: inherit; text-decoration: none; }
 .edit-name-btn {
   background: none; border: 1px solid var(--border-hi);
   font-family: var(--f-mono);
-  font-size: 0.55rem; letter-spacing: 0.1em;
-  color: var(--text-faint);
-  padding: 0.3rem 0.6rem;
+  font-size: 0.72rem; letter-spacing: 0.1em;
+  color: var(--text-dim);
+  padding: 0.35rem 0.75rem;
   cursor: pointer;
   transition: color 0.2s, border-color 0.2s;
 }
@@ -575,15 +575,23 @@ pre.logs {
   gap: 1rem;
   flex-wrap: wrap;
 }
-.foot__left, .foot__right {
+.foot__left {
   font-family: var(--f-mono);
   font-size: 0.5rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
-.foot__right { transition: color 0.2s; }
-.foot__right:hover { color: var(--amber-text); }
+.foot__right {
+  font-family: var(--f-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber-text);
+  font-weight: 500;
+  transition: color 0.2s;
+}
+.foot__right:hover { color: var(--amber-bright); }
 .foot__copy {
   width: 100%;
   text-align: center;
@@ -862,108 +870,170 @@ pre.logs {
     }
   }
 
-  /* ── Demo data — populates the dashboard with sample data for preview ── */
-  var now = new Date();
-  document.getElementById('lastRefreshed').textContent =
-    'Last refreshed: ' + now.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  /* ── Live data from Render backend ── */
+  var BACKEND_URL = 'https://portfolio-sentinel-dashboard.onrender.com';
 
-  var demoScans = [
-    { time: '2026-04-12 09:41', market: 'OPEN', tickers: 12, alerts: 2, errors: 0 },
-    { time: '2026-04-12 08:30', market: 'PRE-MARKET', tickers: 12, alerts: 0, errors: 0 },
-    { time: '2026-04-11 15:55', market: 'OPEN', tickers: 12, alerts: 1, errors: 0 },
-    { time: '2026-04-11 12:00', market: 'OPEN', tickers: 12, alerts: 0, errors: 1 },
-    { time: '2026-04-10 09:45', market: 'OPEN', tickers: 12, alerts: 3, errors: 0 },
-  ];
+  function setLoading() {
+    document.getElementById('lastRefreshed').textContent = 'Loading live data…';
+    ['statScans','statAlerts','statCooldowns','statTickers'].forEach(function(id) {
+      document.getElementById(id).textContent = '—';
+    });
+  }
 
-  var demoResults = [
-    { ticker: 'NVDA',    name: 'NVIDIA Corp',     close: 874.21, rsi: 58.2, sma: 12.4,  buy: 1, sell: 0 },
-    { ticker: 'AAPL',    name: 'Apple Inc',        close: 218.47, rsi: 42.1, sma: -2.1,  buy: 2, sell: 1 },
-    { ticker: 'TSLA',    name: 'Tesla Inc',        close: 241.88, rsi: 31.4, sma: 8.7,   buy: 4, sell: 0 },
-    { ticker: 'AMZN',    name: 'Amazon.com',       close: 187.92, rsi: 72.3, sma: -4.2,  buy: 0, sell: 3 },
-    { ticker: 'MSFT',    name: 'Microsoft Corp',   close: 432.06, rsi: 55.0, sma: 5.1,   buy: 1, sell: 1 },
-    { ticker: 'GOOG',    name: 'Alphabet Inc',     close: 164.30, rsi: 48.8, sma: 1.3,   buy: 1, sell: 0 },
-    { ticker: 'META',    name: 'Meta Platforms',    close: 496.15, rsi: 62.4, sma: 9.8,   buy: 2, sell: 0 },
-    { ticker: 'ELAL.TA', name: 'EL AL Israel',     close: 682.40, rsi: 38.5, sma: 15.2,  buy: 3, sell: 0 },
-    { ticker: 'AMD',     name: 'AMD Inc',          close: 158.23, rsi: 28.9, sma: -6.3,  buy: 3, sell: 0 },
-    { ticker: 'ORCL',    name: 'Oracle Corp',      close: 137.58, rsi: 71.5, sma: -1.8,  buy: 0, sell: 2 },
-  ];
+  function setError(msg) {
+    document.getElementById('lastRefreshed').textContent = 'Error: ' + msg;
+    document.getElementById('scansBody').innerHTML =
+      '<tr><td colspan="5"><div class="empty">Could not reach backend — ' + msg + '</div></td></tr>';
+    document.getElementById('resultsBody').innerHTML =
+      '<tr><td colspan="7"><div class="empty">Could not reach backend.</div></td></tr>';
+    document.getElementById('alertsBody').innerHTML =
+      '<tr><td colspan="7"><div class="empty">Could not reach backend.</div></td></tr>';
+    document.getElementById('cooldownsBody').innerHTML =
+      '<tr><td colspan="4"><div class="empty">Could not reach backend.</div></td></tr>';
+    document.getElementById('logsContent').textContent = 'Could not reach backend.';
+    ['statScans','statAlerts','statCooldowns','statTickers'].forEach(function(id) {
+      document.getElementById(id).textContent = '—';
+    });
+  }
 
-  var demoAlerts = [
-    { time: '2026-04-12 09:41', ticker: 'TSLA', side: 'BUY',  score: 4, indicators: 'SMA200·RSI·MACD·BB', ai: 'BUY',  sent: true },
-    { time: '2026-04-12 09:41', ticker: 'AMZN', side: 'SELL', score: 3, indicators: 'SMA200·RSI·MACD',    ai: 'HOLD', sent: true },
-    { time: '2026-04-11 15:55', ticker: 'AMD',  side: 'BUY',  score: 3, indicators: 'RSI·MACD·BB',        ai: 'BUY',  sent: true },
-    { time: '2026-04-10 09:45', ticker: 'ELAL.TA', side: 'BUY', score: 3, indicators: 'SMA200·RSI·BB',    ai: 'BUY',  sent: true },
-  ];
+  function populateDashboard(data) {
+    document.getElementById('lastRefreshed').textContent = 'Last refreshed: ' + data.now;
+    document.getElementById('statScans').textContent = data.scans.length;
+    document.getElementById('statAlerts').textContent = data.all_alerts.length;
+    var cdCount = Object.keys(data.cooldowns).length;
+    document.getElementById('statCooldowns').textContent = cdCount;
+    var tickerCount = (data.scans.length > 0 && data.scans[0].results)
+      ? data.scans[0].results.length : 0;
+    document.getElementById('statTickers').textContent = tickerCount;
 
-  var demoLogs = [
-    '2026-04-12 09:41:12 [INFO] Starting portfolio scan…',
-    '2026-04-12 09:41:13 [INFO] Loaded 12 tickers from portfolio.xlsx',
-    '2026-04-12 09:41:14 [INFO] Market status: OPEN',
-    '2026-04-12 09:41:18 [INFO] TSLA — BUY score 4/4 (SMA200·RSI·MACD·BB)',
-    '2026-04-12 09:41:19 [INFO] Fetching headlines for TSLA…',
-    '2026-04-12 09:41:22 [INFO] Claude verdict for TSLA: BUY',
-    '2026-04-12 09:41:23 [INFO] WhatsApp alert sent for TSLA BUY',
-    '2026-04-12 09:41:25 [INFO] AMZN — SELL score 3/4 (SMA200·RSI·MACD)',
-    '2026-04-12 09:41:27 [INFO] Claude verdict for AMZN: HOLD',
-    '2026-04-12 09:41:28 [WARNING] AI disagrees with technical signal for AMZN',
-    '2026-04-12 09:41:29 [INFO] WhatsApp alert sent for AMZN SELL',
-    '2026-04-12 09:41:32 [INFO] Scan complete. 2 alerts sent. Next scan in 60s.',
-  ];
+    /* Scans */
+    if (data.scans.length > 0) {
+      var scansHtml = '';
+      data.scans.slice(0, 15).forEach(function(s) {
+        var ts = (s.timestamp || '').slice(0, 16).replace('T', ' ');
+        var errCount = (s.errors || []).length;
+        var forcedBadge = s.forced ? ' <span class="badge badge-forced">FORCED</span>' : '';
+        scansHtml += '<tr>'
+          + '<td>' + ts + '</td>'
+          + '<td>' + (s.market_status || '') + forcedBadge + '</td>'
+          + '<td>' + (s.tickers_count || 0) + '</td>'
+          + '<td>' + (s.alerts_sent ? s.alerts_sent.length : 0) + '</td>'
+          + '<td>' + (errCount ? '<span style="color:var(--red)">' + errCount + '</span>' : '0') + '</td>'
+          + '</tr>';
+      });
+      document.getElementById('scansBody').innerHTML = scansHtml;
+    } else {
+      document.getElementById('scansBody').innerHTML =
+        '<tr><td colspan="5"><div class="empty">No scans recorded yet.</div></td></tr>';
+    }
 
-  /* Populate stats */
-  document.getElementById('statScans').textContent = '5';
-  document.getElementById('statAlerts').textContent = '4';
-  document.getElementById('statCooldowns').textContent = '2';
-  document.getElementById('statTickers').textContent = '12';
+    /* Latest scan results */
+    var latestScan = data.scans.length > 0 ? data.scans[0] : null;
+    if (latestScan && latestScan.results && latestScan.results.length > 0) {
+      var scanTs = (latestScan.timestamp || '').slice(0, 16).replace('T', ' ');
+      document.getElementById('scanResultsTitle').textContent =
+        'Latest Scan Results — ' + scanTs + ' UTC';
+      var resHtml = '';
+      latestScan.results.forEach(function(r) {
+        var rsiColor = r.rsi < 35 ? 'var(--green)' : r.rsi > 70 ? 'var(--red)' : '';
+        var smaVal = r.sma200_delta_pct || 0;
+        var smaColor = smaVal >= 0 ? 'var(--green)' : 'var(--red)';
+        var buyScore = r.buy_score || 0;
+        var sellScore = r.sell_score || 0;
+        var buyClass = buyScore >= 3 ? 'score-high' : buyScore >= 2 ? 'score-mid' : 'score-low';
+        var sellClass = sellScore >= 3 ? 'score-high' : sellScore >= 2 ? 'score-mid' : 'score-low';
+        resHtml += '<tr>'
+          + '<td><strong style="color:var(--amber-text)">' + (r.ticker || '') + '</strong></td>'
+          + '<td>' + (r.name || '') + '</td>'
+          + '<td>$' + parseFloat(r.close || 0).toFixed(2) + '</td>'
+          + '<td><span' + (rsiColor ? ' style="color:' + rsiColor + '"' : '') + '>'
+            + parseFloat(r.rsi || 0).toFixed(1) + '</span></td>'
+          + '<td><span style="color:' + smaColor + '">'
+            + (smaVal >= 0 ? '+' : '') + parseFloat(smaVal).toFixed(1) + '%</span></td>'
+          + '<td><span class="score ' + buyClass + '">' + buyScore + '/4</span></td>'
+          + '<td><span class="score ' + sellClass + '">' + sellScore + '/4</span></td>'
+          + '</tr>';
+      });
+      document.getElementById('resultsBody').innerHTML = resHtml;
+    } else {
+      document.getElementById('scanResultsTitle').textContent = 'Latest Scan Results';
+      document.getElementById('resultsBody').innerHTML =
+        '<tr><td colspan="7"><div class="empty">No scan results yet.</div></td></tr>';
+    }
 
-  /* Populate scans table */
-  var scansHtml = '';
-  demoScans.forEach(function(s) {
-    scansHtml += '<tr><td>' + s.time + '</td><td>' + s.market + '</td><td>' + s.tickers + '</td><td>' + s.alerts + '</td><td>' + (s.errors ? '<span style="color:var(--red)">' + s.errors + '</span>' : '0') + '</td></tr>';
-  });
-  document.getElementById('scansBody').innerHTML = scansHtml;
+    /* Alerts */
+    if (data.all_alerts.length > 0) {
+      var alertHtml = '';
+      data.all_alerts.forEach(function(a) {
+        var sideClass = a.side === 'BUY' ? 'badge-buy' : 'badge-sell';
+        var ai = a.ai_sentiment || '';
+        var aiClass = ai === 'BUY' ? 'badge-buy' : ai === 'SELL' ? 'badge-sell' : 'badge-hold';
+        var aiCell = ai
+          ? '<span class="badge ' + aiClass + '">' + ai + '</span>'
+          : '<span style="color:var(--text-faint)">—</span>';
+        var sentCell = a.whatsapp_sent
+          ? '<span class="badge badge-ok">OK</span>'
+          : '<span class="badge badge-fail">FAIL</span>';
+        var ts = (a.timestamp || '').slice(0, 16).replace('T', ' ');
+        alertHtml += '<tr>'
+          + '<td>' + ts + '</td>'
+          + '<td><strong style="color:var(--amber-text)">' + (a.ticker || '') + '</strong></td>'
+          + '<td><span class="badge ' + sideClass + '">' + (a.side || '') + '</span></td>'
+          + '<td class="score">' + (a.score || 0) + '/4</td>'
+          + '<td>' + (a.indicators || '—') + '</td>'
+          + '<td>' + aiCell + '</td>'
+          + '<td>' + sentCell + '</td>'
+          + '</tr>';
+      });
+      document.getElementById('alertsBody').innerHTML = alertHtml;
+    } else {
+      document.getElementById('alertsBody').innerHTML =
+        '<tr><td colspan="7"><div class="empty">No alerts sent yet.</div></td></tr>';
+    }
 
-  /* Populate results table */
-  document.getElementById('scanResultsTitle').textContent = 'Latest Scan Results — 2026-04-12 09:41 UTC';
-  var resHtml = '';
-  demoResults.forEach(function(r) {
-    var rsiColor = r.rsi < 35 ? 'var(--green)' : r.rsi > 70 ? 'var(--red)' : '';
-    var smaColor = r.sma > 0 ? 'var(--green)' : 'var(--red)';
-    var buyClass = r.buy >= 3 ? 'score-high' : r.buy >= 2 ? 'score-mid' : 'score-low';
-    var sellClass = r.sell >= 3 ? 'score-high' : r.sell >= 2 ? 'score-mid' : 'score-low';
-    resHtml += '<tr>'
-      + '<td><strong style="color:var(--amber-text)">' + r.ticker + '</strong></td>'
-      + '<td>' + r.name + '</td>'
-      + '<td>$' + r.close.toFixed(2) + '</td>'
-      + '<td><span' + (rsiColor ? ' style="color:' + rsiColor + '"' : '') + '>' + r.rsi.toFixed(1) + '</span></td>'
-      + '<td><span style="color:' + smaColor + '">' + (r.sma > 0 ? '+' : '') + r.sma.toFixed(1) + '%</span></td>'
-      + '<td><span class="score ' + buyClass + '">' + r.buy + '/4</span></td>'
-      + '<td><span class="score ' + sellClass + '">' + r.sell + '/4</span></td>'
-      + '</tr>';
-  });
-  document.getElementById('resultsBody').innerHTML = resHtml;
+    /* Cooldowns */
+    var cooldowns = data.cooldowns || {};
+    var cdTickers = Object.keys(cooldowns);
+    if (cdTickers.length > 0) {
+      var cdHtml = '';
+      cdTickers.forEach(function(ticker) {
+        var sides = cooldowns[ticker];
+        Object.keys(sides).forEach(function(side) {
+          var info = sides[side];
+          var pct = Math.min(100, Math.round((info.hours_left / 48) * 100));
+          var sideClass = side === 'BUY' ? 'badge-buy' : 'badge-sell';
+          cdHtml += '<tr>'
+            + '<td><strong style="color:var(--amber-text)">' + ticker + '</strong></td>'
+            + '<td><span class="badge ' + sideClass + '">' + side + '</span></td>'
+            + '<td>' + (info.alerted_at || '') + '</td>'
+            + '<td>' + info.hours_left + 'h left'
+              + '<div class="cooldown-bar"><div class="cooldown-fill" style="width:' + pct + '%"></div></div>'
+              + '</td>'
+            + '</tr>';
+        });
+      });
+      document.getElementById('cooldownsBody').innerHTML = cdHtml;
+    } else {
+      document.getElementById('cooldownsBody').innerHTML =
+        '<tr><td colspan="4"><div class="empty">No active cooldowns.</div></td></tr>';
+    }
 
-  /* Populate alerts table */
-  var alertHtml = '';
-  demoAlerts.forEach(function(a) {
-    var sideClass = a.side === 'BUY' ? 'badge-buy' : 'badge-sell';
-    var aiClass = a.ai === 'BUY' ? 'badge-buy' : a.ai === 'SELL' ? 'badge-sell' : 'badge-hold';
-    alertHtml += '<tr>'
-      + '<td>' + a.time + '</td>'
-      + '<td><strong style="color:var(--amber-text)">' + a.ticker + '</strong></td>'
-      + '<td><span class="badge ' + sideClass + '">' + a.side + '</span></td>'
-      + '<td class="score">' + a.score + '/4</td>'
-      + '<td>' + a.indicators + '</td>'
-      + '<td><span class="badge ' + aiClass + '">' + a.ai + '</span></td>'
-      + '<td><span class="badge ' + (a.sent ? 'badge-ok">OK' : 'badge-fail">FAIL') + '</span></td>'
-      + '</tr>';
-  });
-  document.getElementById('alertsBody').innerHTML = alertHtml;
+    /* Logs */
+    document.getElementById('logsContent').textContent =
+      (data.logs || []).join('\n') || 'No log entries yet.';
 
-  /* Populate logs */
-  document.getElementById('logsContent').textContent = demoLogs.join('\n');
+    injectNameIntoLogs();
+  }
 
-  injectNameIntoLogs();
+  setLoading();
+
+  fetch(BACKEND_URL + '/api/data')
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(populateDashboard)
+    .catch(function(err) { setError(err.message || 'network error'); });
 
   /* Auto-refresh every 60s */
   setTimeout(function() { location.reload(); }, 60000);

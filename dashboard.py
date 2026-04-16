@@ -163,6 +163,29 @@ def index():
     )
 
 
+@app.route("/api/data")
+def api_data():
+    """JSON endpoint for the static Netlify dashboard to fetch live data."""
+    scans = _load_json(SCAN_HISTORY_FILE, [])
+    cooldowns = _get_cooldowns()
+    logs = _get_recent_logs(80)
+
+    all_alerts = []
+    for scan in scans:
+        for alert in scan.get("alerts_sent", []):
+            all_alerts.append(alert)
+
+    response = jsonify({
+        "scans": scans[:20],
+        "cooldowns": cooldowns,
+        "all_alerts": all_alerts[:30],
+        "logs": [l.rstrip("\n") for l in logs],
+        "now": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+    })
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
 @app.route("/upload", methods=["POST"])
 def upload_excel():
     """Save the uploaded Excel, then check for unmapped stock names.
