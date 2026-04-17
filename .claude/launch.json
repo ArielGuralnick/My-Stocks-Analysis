@@ -4,8 +4,12 @@
     {
       "name": "Landing Page",
       "runtimeExecutable": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
-      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "landing_page"],
-      "port": 8080
+      "runtimeArgs": [
+        "-c",
+        "import os,http.server,socketserver; os.chdir('landing_page'); port=int(os.environ.get('PORT','8080')); http.server.ThreadingHTTPServer(('',port), http.server.SimpleHTTPRequestHandler).serve_forever()"
+      ],
+      "port": 8080,
+      "autoPort": true
     }
   ]
 }

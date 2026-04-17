@@ -43,34 +43,13 @@
   </div>
 </header>
 
-<!-- ─── Marquee strip: mock portfolio feed ─── -->
-<div class="marquee" aria-hidden="true">
+<!-- ─── Marquee strip: live portfolio feed (populated by script.js) ─── -->
+<div class="marquee" id="liveMarquee" aria-hidden="true" data-symbols="NVDA,AAPL,MSFT,AMZN,TSLA,GOOG,META,ORCL,AMD,NFLX">
   <div class="marquee__track">
-    <span class="marquee__row">
-      <span class="mq"><b>NVDA</b> 874.21 <i class="up">▲ 2.14%</i> <em>MACD·BB·RSI</em></span>
-      <span class="mq"><b>AAPL</b> 218.47 <i class="dn">▼ 0.82%</i> <em>SMA200 hold</em></span>
-      <span class="mq"><b>MSFT</b> 432.06 <i class="up">▲ 1.03%</i> <em>neutral</em></span>
-      <span class="mq"><b>AMZN</b> 187.92 <i class="dn">▼ 1.47%</i> <em>SELL 3/4</em></span>
-      <span class="mq"><b>TSLA</b> 241.88 <i class="up">▲ 3.21%</i> <em>BUY 4/4</em></span>
-      <span class="mq"><b>GOOG</b> 164.30 <i class="dn">▼ 0.44%</i> <em>neutral</em></span>
-      <span class="mq"><b>META</b> 496.15 <i class="up">▲ 0.92%</i> <em>RSI·MACD</em></span>
-      <span class="mq"><b>ORCL</b> 137.58 <i class="dn">▼ 2.01%</i> <em>cooldown 48h</em></span>
-      <span class="mq"><b>ELAL.TA</b> 682.40 <i class="up">▲ 1.74%</i> <em>BUY 3/4</em></span>
-      <span class="mq"><b>AMD</b>  158.23 <i class="up">▲ 2.88%</i> <em>BB·MACD·RSI</em></span>
+    <span class="marquee__row" data-marquee-row>
+      <span class="mq" data-marquee-loading><b>Loading live quotes…</b></span>
     </span>
-    <!-- Duplicated for seamless loop -->
-    <span class="marquee__row" aria-hidden="true">
-      <span class="mq"><b>NVDA</b> 874.21 <i class="up">▲ 2.14%</i> <em>MACD·BB·RSI</em></span>
-      <span class="mq"><b>AAPL</b> 218.47 <i class="dn">▼ 0.82%</i> <em>SMA200 hold</em></span>
-      <span class="mq"><b>MSFT</b> 432.06 <i class="up">▲ 1.03%</i> <em>neutral</em></span>
-      <span class="mq"><b>AMZN</b> 187.92 <i class="dn">▼ 1.47%</i> <em>SELL 3/4</em></span>
-      <span class="mq"><b>TSLA</b> 241.88 <i class="up">▲ 3.21%</i> <em>BUY 4/4</em></span>
-      <span class="mq"><b>GOOG</b> 164.30 <i class="dn">▼ 0.44%</i> <em>neutral</em></span>
-      <span class="mq"><b>META</b> 496.15 <i class="up">▲ 0.92%</i> <em>RSI·MACD</em></span>
-      <span class="mq"><b>ORCL</b> 137.58 <i class="dn">▼ 2.01%</i> <em>cooldown 48h</em></span>
-      <span class="mq"><b>ELAL.TA</b> 682.40 <i class="up">▲ 1.74%</i> <em>BUY 3/4</em></span>
-      <span class="mq"><b>AMD</b>  158.23 <i class="up">▲ 2.88%</i> <em>BB·MACD·RSI</em></span>
-    </span>
+    <span class="marquee__row" data-marquee-row aria-hidden="true"></span>
   </div>
 </div>
 

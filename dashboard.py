@@ -163,6 +163,78 @@ def index():
     )
 
 
+@app.route("/api/quotes")
+def api_quotes():
+    """Return live quotes for a comma-separated list of Yahoo Finance symbols.
+
+    Usage:  /api/quotes?symbols=NVDA,AAPL,MSFT
+    Response: { "quotes": [ {"symbol": "NVDA", "price": 874.21, "change_pct": 2.14}, ... ] }
+    """
+    symbols_raw = request.args.get("symbols", "")
+    symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()]
+    if not symbols:
+        return jsonify({"ok": False, "error": "No symbols provided"}), 400
+
+    try:
+        import yfinance as yf
+    except ImportError:
+        return jsonify({"ok": False, "error": "yfinance not installed"}), 500
+
+    quotes = []
+    for sym in symbols:
+        try:
+            hist = yf.Ticker(sym).history(period="2d", auto_adjust=False)
+            if hist is None or hist.empty or len(hist) < 1:
+                quotes.append({"symbol": sym, "error": "no data"})
+                continue
+            last_close = float(hist["Close"].iloc[-1])
+            if len(hist) >= 2:
+                prev_close = float(hist["Close"].iloc[-2])
+                change_pct = ((last_close - prev_close) / prev_close) * 100.0 if prev_close else 0.0
+            else:
+                change_pct = 0.0
+            quotes.append({
+                "symbol": sym,
+                "price": round(last_close, 2),
+                "change_pct": round(change_pct, 2),
+            })
+        except Exception as exc:
+            quotes.append({"symbol": sym, "error": str(exc)[:120]})
+
+    response = jsonify({
+        "ok": True,
+        "quotes": quotes,
+        "fetched_at": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+    })
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
+@app.route("/api/force_scan", methods=["POST", "OPTIONS"])
+def api_force_scan():
+    """Manually trigger a portfolio scan (useful when the scheduler hasn't run yet
+    or the market is closed but the user wants to populate the dashboard).
+    """
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+
+    try:
+        from portfolio_monitor import run_once
+        run_once(force=True)
+    except Exception as exc:
+        response = jsonify({"ok": False, "error": str(exc)[:200]})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response, 500
+
+    response = jsonify({"ok": True, "message": "Scan completed."})
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
 @app.route("/api/data")
 def api_data():
     """JSON endpoint for the static Netlify dashboard to fetch live data."""
@@ -1201,9 +1273,22 @@ def _start_scheduler() -> None:
         misfire_grace_time=300,
     )
 
+    # One-shot startup scan: runs ~5s after the service comes up so the dashboard
+    # has fresh data on first load (Render spins down free services when idle).
+    # force=True so it still populates outside market hours.
+    from datetime import datetime as _dt, timedelta as _td
+    scheduler.add_job(
+        lambda: run_once(force=True),
+        trigger="date",
+        run_date=_dt.now() + _td(seconds=5),
+        id="portfolio_scan_startup",
+        replace_existing=True,
+        misfire_grace_time=120,
+    )
+
     scheduler.start()
     logging.getLogger("dashboard").info(
-        "Scheduler started — scans run every 30 min Mon–Fri 09:30–16:00 ET"
+        "Scheduler started — initial scan in ~5s, then every 30 min Mon–Fri 09:30–16:00 ET"
     )
 
 

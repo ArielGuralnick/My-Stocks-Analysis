@@ -681,6 +681,7 @@ pre.logs {
     <div class="nav__right">
       <span class="nav__greeting" id="greeting"></span>
       <button class="edit-name-btn" id="editNameBtn" title="Edit name">&#9998;</button>
+      <button class="edit-name-btn" id="forceScanBtn" title="Run a portfolio scan now (ignores market-closed check)">&#9654; RUN SCAN NOW</button>
       <button class="edit-name-btn" id="uploadBtn" title="Upload Excel portfolio file">&#8679; UPLOAD EXCEL</button>
       <a class="nav__link" href="index.html">← Landing Page</a>
     </div>
@@ -1027,16 +1028,79 @@ pre.logs {
 
   setLoading();
 
+  // Track whether we've already auto-triggered a scan this session to avoid loops.
+  var autoScanTriggered = sessionStorage.getItem('sps_auto_scan_triggered') === '1';
+
+  function autoTriggerScanIfEmpty(data) {
+    if (autoScanTriggered) return;
+    var isEmpty = !data || !data.scans || data.scans.length === 0;
+    if (!isEmpty) return;
+    autoScanTriggered = true;
+    sessionStorage.setItem('sps_auto_scan_triggered', '1');
+    document.getElementById('lastRefreshed').textContent =
+      'No scans yet — running one now (takes ~20–60s)…';
+    fetch(BACKEND_URL + '/api/force_scan', { method: 'POST' })
+      .then(function(r) { return r.json().catch(function() { return {}; }); })
+      .then(function(res) {
+        if (res && res.ok) { location.reload(); }
+        else {
+          document.getElementById('lastRefreshed').textContent =
+            'Auto-scan failed: ' + ((res && res.error) || 'unknown error');
+        }
+      })
+      .catch(function(err) {
+        document.getElementById('lastRefreshed').textContent =
+          'Auto-scan request failed — ' + (err.message || 'network error');
+      });
+  }
+
   fetch(BACKEND_URL + '/api/data')
     .then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     })
-    .then(populateDashboard)
+    .then(function(data) {
+      populateDashboard(data);
+      autoTriggerScanIfEmpty(data);
+    })
     .catch(function(err) { setError(err.message || 'network error'); });
 
   /* Auto-refresh every 60s */
   setTimeout(function() { location.reload(); }, 60000);
+
+  /* ── Force scan button ── */
+  var forceBtn = document.getElementById('forceScanBtn');
+  if (forceBtn) {
+    forceBtn.addEventListener('click', function() {
+      if (forceBtn.disabled) return;
+      var original = forceBtn.innerHTML;
+      forceBtn.disabled = true;
+      forceBtn.innerHTML = '… SCANNING';
+      fetch(BACKEND_URL + '/api/force_scan', { method: 'POST' })
+        .then(function(r) { return r.json().catch(function() { return {}; }); })
+        .then(function(data) {
+          if (data && data.ok) {
+            forceBtn.innerHTML = '✓ DONE — RELOADING';
+            setTimeout(function() { location.reload(); }, 1200);
+          } else {
+            forceBtn.innerHTML = '✗ FAILED';
+            console.error('Force scan failed:', data && data.error);
+            setTimeout(function() {
+              forceBtn.innerHTML = original;
+              forceBtn.disabled = false;
+            }, 3000);
+          }
+        })
+        .catch(function(err) {
+          console.error('Force scan request failed:', err);
+          forceBtn.innerHTML = '✗ NETWORK ERROR';
+          setTimeout(function() {
+            forceBtn.innerHTML = original;
+            forceBtn.disabled = false;
+          }, 3000);
+        });
+    });
+  }
 
   /* ── Upload Excel / Ticker Mapping Wizard ─────────────────────────────── */
   (function() {

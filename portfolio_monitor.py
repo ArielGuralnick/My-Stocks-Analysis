@@ -834,26 +834,55 @@ def run_once(force: bool = False) -> None:
         log.info("Market closed — no checks performed. (%s)", reason)
         return
 
-    # Cloud / no-Excel fallback: TICKERS env var (comma-separated Yahoo symbols).
+    # Resolution order for tickers to scan:
+    #   1. TICKERS env var (comma-separated Yahoo symbols) — cloud override.
+    #   2. Excel portfolio (if EXCEL_FILE is set and the file exists locally).
+    #   3. Fallback to TICKER_MAP values from config.yaml — keeps the cloud scan
+    #      running when the Excel path points at a local machine the server can't see.
     _tickers_env = os.getenv("TICKERS", "").strip()
+    tickers: list[tuple[str, str]] = []
+    resolution_note: str = ""
+
     if _tickers_env:
         tickers = [(t.strip(), t.strip()) for t in _tickers_env.split(",") if t.strip()]
+        resolution_note = f"TICKERS env var ({len(tickers)} symbols)"
         log.info("Using TICKERS env var: %s", ", ".join(t for _, t in tickers))
-    elif not EXCEL_FILE:
-        log.error("No tickers configured. Set TICKERS or EXCEL_FILE in env.")
-        return
-    elif not Path(EXCEL_FILE).exists():
-        log.error("Excel file not found: %s", EXCEL_FILE)
-        return
-    else:
+    elif EXCEL_FILE and Path(EXCEL_FILE).exists():
         try:
             names = load_portfolio_names(EXCEL_FILE)
+            tickers = resolve_tickers(names)
+            resolution_note = f"Excel ({EXCEL_FILE})"
         except Exception as e:
             log.error("Loading Excel failed: %s", e)
             log.debug(traceback.format_exc())
-            return
-        tickers = resolve_tickers(names)
-    log.info("Monitoring %d symbols.", len(tickers))
+            # Fall through to TICKER_MAP fallback below rather than returning.
+
+    if not tickers:
+        # Fallback to TICKER_MAP values — the user's curated portfolio symbols from config.yaml.
+        mapped = sorted({v for v in TICKER_MAP.values() if v})
+        if mapped:
+            tickers = [(sym, sym) for sym in mapped]
+            resolution_note = f"TICKER_MAP fallback ({len(tickers)} symbols from config.yaml)"
+            log.info(
+                "Excel not available — falling back to TICKER_MAP values: %s",
+                ", ".join(mapped),
+            )
+
+    if not tickers:
+        log.error("No tickers configured. Set TICKERS env var, EXCEL_FILE, or add to config.yaml ticker_map.")
+        # Persist an empty scan record so the dashboard can show the reason.
+        save_scan_record({
+            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "market_status": reason,
+            "forced": force,
+            "tickers_count": 0,
+            "results": [],
+            "alerts_sent": [],
+            "errors": [{"ticker": "-", "error": "No tickers configured (TICKERS / EXCEL_FILE / ticker_map all empty)"}],
+        })
+        return
+
+    log.info("Monitoring %d symbols (source: %s).", len(tickers), resolution_note)
 
     state = load_state()
 
