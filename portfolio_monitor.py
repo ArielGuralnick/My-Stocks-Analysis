@@ -51,6 +51,7 @@ import logging
 import os
 import re
 import sys
+import threading
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -129,9 +130,13 @@ SCAN_HISTORY_FILE = DATA_DIR / "scan_history.json"
 LOG_FILE = DATA_DIR / "trading_bot.log"
 
 COOLDOWN_HOURS = 48                    # Per-ticker cooldown
+MIN_SCAN_INTERVAL_MINUTES = 25         # Minimum minutes between scans (prevents duplicate runs on restart)
 MARKET_TZ = ZoneInfo("America/New_York")
 API_MAX_RETRIES = 3                    # Retry count for Anthropic & Green API
 API_RETRY_DELAY = 5                    # Seconds between retries
+
+# Global lock: only one scan may run at a time (prevents concurrent scans from duplicate scheduler instances)
+_scan_lock = threading.Lock()
 
 NEWS_HEADLINE_LIMIT = 5
 TECHNICAL_SCORE_THRESHOLD = 3          # ≥ 3 of 4 indicators must fire
@@ -828,6 +833,37 @@ def format_hybrid_alert(
 
 def run_once(force: bool = False) -> None:
     """Run a single hybrid scan. Skips if the market is closed unless force=True."""
+    # Prevent concurrent scans (e.g. scheduler + startup job firing simultaneously)
+    if not _scan_lock.acquire(blocking=False):
+        log.info("Scan already in progress — skipping duplicate run.")
+        return
+
+    try:
+        _run_once_inner(force=force)
+    finally:
+        _scan_lock.release()
+
+
+def _run_once_inner(force: bool = False) -> None:
+    """Internal scan implementation (called only while _scan_lock is held)."""
+    # Guard: skip if a scan already ran recently (protects against rapid restarts
+    # re-sending alerts before the 48-hour cooldown state is written to disk).
+    history = load_scan_history()
+    if history:
+        try:
+            last_ts = datetime.fromisoformat(history[0]["timestamp"])
+            if last_ts.tzinfo is None:
+                last_ts = last_ts.replace(tzinfo=timezone.utc)
+            age_minutes = (datetime.now(tz=timezone.utc) - last_ts).total_seconds() / 60
+            if age_minutes < MIN_SCAN_INTERVAL_MINUTES:
+                log.info(
+                    "Last scan was %.1f min ago (< %d min threshold) — skipping.",
+                    age_minutes, MIN_SCAN_INTERVAL_MINUTES,
+                )
+                return
+        except Exception:
+            pass  # If we can't parse the history, proceed normally
+
     open_now, reason = is_us_market_open()
     log.info("===== SCAN start — market %s =====", reason)
     if not open_now and not force:

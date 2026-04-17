@@ -1275,10 +1275,31 @@ def _start_scheduler() -> None:
 
     # One-shot startup scan: runs ~5s after the service comes up so the dashboard
     # has fresh data on first load (Render spins down free services when idle).
+    # Only fires if no scan has run in the last 25 minutes — prevents duplicate
+    # alerts when Render restarts the service on wake-up.
     # force=True so it still populates outside market hours.
     from datetime import datetime as _dt, timedelta as _td
+
+    def _startup_scan_if_stale():
+        history = _load_json(SCAN_HISTORY_FILE, [])
+        if history:
+            try:
+                from datetime import timezone as _tz
+                last_ts = _dt.fromisoformat(history[0]["timestamp"])
+                if last_ts.tzinfo is None:
+                    last_ts = last_ts.replace(tzinfo=_tz.utc)
+                age_minutes = (_dt.now(tz=_tz.utc) - last_ts).total_seconds() / 60
+                if age_minutes < 25:
+                    logging.getLogger("dashboard").info(
+                        "Startup scan skipped — last scan was %.1f min ago.", age_minutes
+                    )
+                    return
+            except Exception:
+                pass
+        run_once(force=True)
+
     scheduler.add_job(
-        lambda: run_once(force=True),
+        _startup_scan_if_stale,
         trigger="date",
         run_date=_dt.now() + _td(seconds=5),
         id="portfolio_scan_startup",
