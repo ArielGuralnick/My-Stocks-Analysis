@@ -124,27 +124,29 @@ a { color: inherit; text-decoration: none; }
   color: var(--cyan);
   letter-spacing: 0.08em;
 }
-.nav__link {
+.nav__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
   font-family: var(--f-mono);
-  font-size: 0.85rem;
-  letter-spacing: 0.12em;
+  font-size: 0.52rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--text);
-  padding: 0.4rem 0.9rem;
-  border: 1px solid var(--border-hi);
-  transition: color 0.2s, border-color 0.2s;
-}
-.nav__link:hover { color: var(--amber-text); border-color: var(--amber); }
-.edit-name-btn {
-  background: none; border: 1px solid var(--border-hi);
-  font-family: var(--f-mono);
-  font-size: 0.85rem; letter-spacing: 0.1em;
-  color: var(--text);
-  padding: 0.38rem 0.8rem;
+  color: var(--text-faint);
+  background: rgba(210,200,255,0.04);
+  border: 1px solid var(--border);
+  padding: 0.28rem 0.7rem;
+  border-radius: 2px;
   cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
+  text-decoration: none;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+  white-space: nowrap;
 }
-.edit-name-btn:hover { color: var(--amber-text); border-color: var(--amber); }
+.nav__chip:hover {
+  color: var(--amber-text);
+  border-color: var(--amber);
+  background: var(--amber-glow);
+}
 
 /* ─── Dashboard container ─── */
 .dash {
@@ -352,62 +354,6 @@ pre.logs {
   transform: scale(1.1);
   box-shadow: 0 6px 24px rgba(192,128,30,0.5);
 }
-
-/* ─── Name modal ─── */
-.name-modal-overlay {
-  display: none;
-  position: fixed; inset: 0;
-  background: rgba(7,7,13,0.75);
-  z-index: 1000;
-  justify-content: center;
-  align-items: center;
-  backdrop-filter: blur(4px);
-}
-.name-modal-overlay.open { display: flex; }
-.name-modal {
-  background: var(--surface);
-  border: 1px solid var(--border-hi);
-  padding: 2rem;
-  width: 340px;
-  max-width: 90vw;
-}
-.name-modal h3 {
-  font-family: var(--f-display);
-  font-size: 1.4rem;
-  font-weight: 300;
-  margin-bottom: 1rem;
-  color: var(--text);
-}
-.name-modal input {
-  width: 100%;
-  padding: 0.7rem 0.9rem;
-  background: var(--surface-2);
-  border: 1px solid var(--border-hi);
-  color: var(--text);
-  font-family: var(--f-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  outline: none;
-  margin-bottom: 1rem;
-  transition: border-color 0.2s;
-}
-.name-modal input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-glow); }
-.name-modal-btns { display: flex; gap: 0.6rem; justify-content: flex-end; }
-.name-modal-btns button {
-  padding: 0.45rem 1rem;
-  border: none;
-  font-family: var(--f-mono);
-  font-size: 0.6rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
-}
-.btn-save   { background: var(--amber); color: var(--bg); }
-.btn-save:hover { background: var(--amber-bright); }
-.btn-cancel { background: var(--surface-2); color: var(--text-dim); }
-.btn-cancel:hover { background: var(--surface-hi); }
 
 /* ─── Upload modal ─── */
 .upload-modal-overlay {
@@ -627,7 +573,7 @@ pre.logs {
     <!-- Panel 1: file picker -->
     <div id="uploadPanel">
       <h3>Upload Portfolio Excel</h3>
-      <p>Upload your Excel export from Excellence brokerage.<br>
+      <p>Upload your Excel export from your brokerage.<br>
          The file will be saved and the next scan will use it automatically.</p>
       <div class="upload-drop-zone" id="uploadDropZone">
         <input type="file" id="uploadFileInput" accept=".xlsx,.xls">
@@ -662,28 +608,13 @@ pre.logs {
   </div>
 </div>
 
-<!-- Name modal -->
-<div class="name-modal-overlay" id="nameModal">
-  <div class="name-modal">
-    <h3>Set your name</h3>
-    <input type="text" id="nameInput" placeholder="Enter your name…" maxlength="40" autocomplete="off">
-    <div class="name-modal-btns">
-      <button class="btn-cancel" id="nameCancel">Cancel</button>
-      <button class="btn-save" id="nameSave">Save</button>
-    </div>
-  </div>
-</div>
-
 <!-- Nav -->
 <nav class="nav">
   <div class="nav__inner">
     <span class="nav__title"><b>PORTFOLIO MONITOR</b> <span style="color:var(--text-faint);margin:0 0.4em;">//</span> SMART PORTFOLIO SENTINEL</span>
     <div class="nav__right">
-      <span class="nav__greeting" id="greeting"></span>
-      <button class="edit-name-btn" id="editNameBtn" title="Edit name">&#9998;</button>
-      <button class="edit-name-btn" id="forceScanBtn" title="Run a portfolio scan now (ignores market-closed check)">&#9654; RUN SCAN NOW</button>
-      <button class="edit-name-btn" id="uploadBtn" title="Upload Excel portfolio file">&#8679; UPLOAD EXCEL</button>
-      <a class="nav__link" href="index.html">← Landing Page</a>
+      <button class="nav__chip" id="uploadBtn">↑ Upload Excel</button>
+      <a class="nav__chip nav__chip--link" href="index.html">← Landing Page</a>
     </div>
   </div>
 </nav>
@@ -810,66 +741,6 @@ pre.logs {
 <script>
 (function() {
   "use strict";
-
-  /* ── Name / greeting ── */
-  const KEY = 'portfolio_user_name';
-  const greetingEl = document.getElementById('greeting');
-  const editBtn    = document.getElementById('editNameBtn');
-  const modal      = document.getElementById('nameModal');
-  const nameInput  = document.getElementById('nameInput');
-  const saveBtn    = document.getElementById('nameSave');
-  const cancelBtn  = document.getElementById('nameCancel');
-
-  function updateGreeting() {
-    const name = localStorage.getItem(KEY);
-    if (name) {
-      greetingEl.textContent = 'Welcome back, ' + name;
-      editBtn.innerHTML = '&#9998;';
-      editBtn.title = 'Change name';
-    } else {
-      greetingEl.textContent = '';
-      editBtn.innerHTML = '&#9998; SET NAME';
-      editBtn.title = 'Set your name';
-    }
-  }
-
-  function openModal() {
-    nameInput.value = localStorage.getItem(KEY) || '';
-    modal.classList.add('open');
-    setTimeout(function() { nameInput.focus(); }, 50);
-  }
-  function closeModal() { modal.classList.remove('open'); }
-  function saveName() {
-    var val = nameInput.value.trim();
-    if (val) { localStorage.setItem(KEY, val); } else { localStorage.removeItem(KEY); }
-    closeModal();
-    updateGreeting();
-    injectNameIntoLogs();
-  }
-
-  editBtn.addEventListener('click', openModal);
-  cancelBtn.addEventListener('click', closeModal);
-  saveBtn.addEventListener('click', saveName);
-  nameInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') saveName();
-    if (e.key === 'Escape') closeModal();
-  });
-  modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
-
-  updateGreeting();
-
-  /* ── Log name injection ── */
-  function injectNameIntoLogs() {
-    var name = localStorage.getItem(KEY);
-    var logPre = document.getElementById('logsContent');
-    if (name && logPre && logPre.textContent !== 'No log entries yet.') {
-      var ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
-      var line = '[INFO] User ' + name + ' initiated scan view at ' + ts + '\n';
-      if (!logPre.textContent.startsWith('[INFO] User ')) {
-        logPre.textContent = line + logPre.textContent;
-      }
-    }
-  }
 
   /* ── Live data from Render backend ── */
   var BACKEND_URL = 'https://portfolio-sentinel-dashboard.onrender.com';
@@ -1022,8 +893,6 @@ pre.logs {
     /* Logs */
     document.getElementById('logsContent').textContent =
       (data.logs || []).join('\n') || 'No log entries yet.';
-
-    injectNameIntoLogs();
   }
 
   /* ── localStorage cache: show last known data instantly, then refresh ── */
@@ -1104,40 +973,6 @@ pre.logs {
 
   /* Auto-refresh every 60s */
   setTimeout(function() { location.reload(); }, 60000);
-
-  /* ── Force scan button ── */
-  var forceBtn = document.getElementById('forceScanBtn');
-  if (forceBtn) {
-    forceBtn.addEventListener('click', function() {
-      if (forceBtn.disabled) return;
-      var original = forceBtn.innerHTML;
-      forceBtn.disabled = true;
-      forceBtn.innerHTML = '… SCANNING';
-      fetch(BACKEND_URL + '/api/force_scan', { method: 'POST' })
-        .then(function(r) { return r.json().catch(function() { return {}; }); })
-        .then(function(data) {
-          if (data && data.ok) {
-            forceBtn.innerHTML = '✓ DONE — RELOADING';
-            setTimeout(function() { location.reload(); }, 1200);
-          } else {
-            forceBtn.innerHTML = '✗ FAILED';
-            console.error('Force scan failed:', data && data.error);
-            setTimeout(function() {
-              forceBtn.innerHTML = original;
-              forceBtn.disabled = false;
-            }, 3000);
-          }
-        })
-        .catch(function(err) {
-          console.error('Force scan request failed:', err);
-          forceBtn.innerHTML = '✗ NETWORK ERROR';
-          setTimeout(function() {
-            forceBtn.innerHTML = original;
-            forceBtn.disabled = false;
-          }, 3000);
-        });
-    });
-  }
 
   /* ── Upload Excel / Ticker Mapping Wizard ─────────────────────────────── */
   (function() {
