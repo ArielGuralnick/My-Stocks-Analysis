@@ -94,7 +94,54 @@
   }
 
 
-  /* ── 5. Live ticker marquee (fetched from Render backend) ── */
+  /* ── 5. Market open/closed status (NYSE hours, ET) ── */
+  (function() {
+    var NYSE_HOLIDAYS = new Set([
+      "2025-01-01","2025-01-20","2025-02-17","2025-04-18","2025-05-26",
+      "2025-06-19","2025-07-04","2025-09-01","2025-11-27","2025-12-25",
+      "2026-01-01","2026-01-19","2026-02-16","2026-04-03","2026-05-25",
+      "2026-06-19","2026-07-03","2026-09-07","2026-11-26","2026-12-25",
+    ]);
+
+    function isNYSEOpen() {
+      var now = new Date();
+      var parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false
+      }).formatToParts(now);
+      var get = function(type) { return parts.find(function(p) { return p.type === type; }).value; };
+      var weekday = get("weekday");
+      if (weekday === "Sat" || weekday === "Sun") return false;
+      var iso = get("year") + "-" + get("month") + "-" + get("day");
+      if (NYSE_HOLIDAYS.has(iso)) return false;
+      var h = parseInt(get("hour"), 10), m = parseInt(get("minute"), 10);
+      var mins = h * 60 + m;
+      return mins >= 570 && mins < 960; // 9:30–16:00
+    }
+
+    function updateMarketStatus() {
+      var dot  = document.getElementById("market-status-dot");
+      var text = document.getElementById("market-status-text");
+      var wrap = document.getElementById("market-status");
+      if (!dot || !text || !wrap) return;
+      if (isNYSEOpen()) {
+        dot.classList.remove("ticker__dot--closed");
+        text.innerHTML = "MARKET&nbsp;LIVE";
+        wrap.classList.remove("market-closed");
+      } else {
+        dot.classList.add("ticker__dot--closed");
+        text.innerHTML = "MARKET&nbsp;CLOSED";
+        wrap.classList.add("market-closed");
+      }
+    }
+
+    updateMarketStatus();
+    setInterval(updateMarketStatus, 60 * 1000);
+  })();
+
+
+  /* ── 6. Live ticker marquee (fetched from Render backend) ── */
   const BACKEND_URL = "https://portfolio-sentinel-dashboard.onrender.com";
   const marquee = document.getElementById("liveMarquee");
   if (marquee) {

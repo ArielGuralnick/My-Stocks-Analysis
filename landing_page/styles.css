@@ -187,6 +187,14 @@ button, input, select, textarea { font: inherit; }
   0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--cyan), 0 0 20px rgba(0,217,184,0.45); }
   50%       { opacity: 0.35; box-shadow: 0 0 3px var(--cyan); }
 }
+.ticker__dot--closed {
+  background: #ff3055;
+  box-shadow: 0 0 6px rgba(255,48,85,0.5);
+  animation: none;
+}
+#market-status.market-closed {
+  color: rgba(234, 229, 219, 0.45);
+}
 
 /* ─── 5. Marquee ──────────────────────────────────────────────────── */
 .marquee {

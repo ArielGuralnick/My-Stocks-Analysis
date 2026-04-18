@@ -1296,7 +1296,10 @@ def _start_scheduler() -> None:
                     return
             except Exception:
                 pass
-        run_once(force=True)
+        # notify=False: populate dashboard data without re-sending WhatsApp alerts.
+        # This prevents duplicate alerts when Render restarts the service and the
+        # cooldown state file (signals_state.json) has been lost on the ephemeral FS.
+        run_once(force=True, notify=False)
 
     scheduler.add_job(
         _startup_scan_if_stale,

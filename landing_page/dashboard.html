@@ -1026,7 +1026,35 @@ pre.logs {
     injectNameIntoLogs();
   }
 
-  setLoading();
+  /* ── localStorage cache: show last known data instantly, then refresh ── */
+  var CACHE_KEY = 'sps_dashboard_v1';
+  var CACHE_MAX_AGE_MS = 30 * 60 * 1000; // 30 min
+
+  function readCache() {
+    try {
+      var raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      var obj = JSON.parse(raw);
+      if (!obj || !obj.ts || !obj.data) return null;
+      if (Date.now() - obj.ts > CACHE_MAX_AGE_MS) return null;
+      return obj.data;
+    } catch(e) { return null; }
+  }
+
+  function writeCache(data) {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); }
+    catch(e) {}
+  }
+
+  // Show cached data immediately (no spinner, no zeros)
+  var cached = readCache();
+  if (cached) {
+    populateDashboard(cached);
+    document.getElementById('lastRefreshed').textContent =
+      'Last refreshed: ' + cached.now + ' (cached — updating…)';
+  } else {
+    setLoading();
+  }
 
   // Track whether we've already auto-triggered a scan this session to avoid loops.
   var autoScanTriggered = sessionStorage.getItem('sps_auto_scan_triggered') === '1';
@@ -1060,10 +1088,19 @@ pre.logs {
       return r.json();
     })
     .then(function(data) {
+      writeCache(data);
       populateDashboard(data);
       autoTriggerScanIfEmpty(data);
     })
-    .catch(function(err) { setError(err.message || 'network error'); });
+    .catch(function(err) {
+      // If we already showed cached data, just update the subtitle rather than wipe everything
+      if (cached) {
+        document.getElementById('lastRefreshed').textContent =
+          'Last refreshed: ' + cached.now + ' (cached — backend offline: ' + (err.message || 'network error') + ')';
+      } else {
+        setError(err.message || 'network error');
+      }
+    });
 
   /* Auto-refresh every 60s */
   setTimeout(function() { location.reload(); }, 60000);

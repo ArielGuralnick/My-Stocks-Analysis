@@ -831,20 +831,24 @@ def format_hybrid_alert(
 # SCAN (hybrid workflow)
 # ---------------------------------------------------------------------------
 
-def run_once(force: bool = False) -> None:
-    """Run a single hybrid scan. Skips if the market is closed unless force=True."""
+def run_once(force: bool = False, notify: bool = True) -> None:
+    """Run a single hybrid scan. Skips if the market is closed unless force=True.
+    Pass notify=False to run analysis and populate dashboard data without sending
+    any WhatsApp alerts (used by the startup scan to avoid re-alerting after
+    a Render service restart when the cooldown state file may have been lost).
+    """
     # Prevent concurrent scans (e.g. scheduler + startup job firing simultaneously)
     if not _scan_lock.acquire(blocking=False):
         log.info("Scan already in progress — skipping duplicate run.")
         return
 
     try:
-        _run_once_inner(force=force)
+        _run_once_inner(force=force, notify=notify)
     finally:
         _scan_lock.release()
 
 
-def _run_once_inner(force: bool = False) -> None:
+def _run_once_inner(force: bool = False, notify: bool = True) -> None:
     """Internal scan implementation (called only while _scan_lock is held)."""
     # Guard: skip if a scan already ran recently (protects against rapid restarts
     # re-sending alerts before the 48-hour cooldown state is written to disk).
@@ -975,6 +979,7 @@ def _run_once_inner(force: bool = False) -> None:
                     side=side,
                     tech=tech,
                     state=state,
+                    notify=notify,
                 )
                 if alert_info:
                     scan_record["alerts_sent"].append(alert_info)
@@ -994,10 +999,12 @@ def _process_signal_side(
     side: str,
     tech: dict,
     state: dict,
+    notify: bool = True,
 ) -> Optional[dict]:
     """Run the news → LLM → WhatsApp pipeline for one side (BUY or SELL).
     WhatsApp is sent whenever the technical score passes, regardless
-    of what the AI says. Returns alert info dict if sent, None otherwise."""
+    of what the AI says. Pass notify=False to skip WhatsApp (analysis still runs).
+    Returns alert info dict if sent, None otherwise."""
     triggered = tech["buy_triggered"] if side == "BUY" else tech["sell_triggered"]
     score = tech["buy_score"] if side == "BUY" else tech["sell_score"]
 
@@ -1026,6 +1033,10 @@ def _process_signal_side(
                      ticker, llm["sentiment"], side)
 
     # ---------- Step 4: WhatsApp alert (always when technical filter passes) ----------
+    if not notify:
+        log.info("[%s] notify=False — skipping WhatsApp alert (dashboard-only scan).", ticker)
+        return None
+
     if is_in_cooldown(state, ticker, side):
         log.info(
             "Cooldown active for %s %s — suppressing alert (%dh window).",
