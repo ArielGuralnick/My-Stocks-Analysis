@@ -10,6 +10,7 @@ Open: http://localhost:5050
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -35,6 +36,67 @@ CONFIG_FILE = BASE_DIR / "config.yaml"
 UPLOADS_DIR = BASE_DIR / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
 ALLOWED_EXTENSIONS = {".xlsx", ".xls"}
+
+# GitHub persistence — keeps scan_history.json alive across Render free-tier restarts.
+# Set GITHUB_TOKEN (classic token with repo scope) in Render's Environment tab.
+_GH_TOKEN  = os.getenv("GITHUB_TOKEN", "")
+_GH_REPO   = os.getenv("GITHUB_REPO", "ArielGuralnick/My-Stocks-Analysis")
+_GH_BRANCH = os.getenv("GITHUB_BRANCH", "main")
+_GH_PATH   = "data/scan_history.json"
+_GH_API    = f"https://api.github.com/repos/{_GH_REPO}/contents/{_GH_PATH}"
+_log       = logging.getLogger("dashboard")
+
+
+def _github_pull() -> bool:
+    """Download scan_history.json from GitHub into the local DATA_DIR.
+    Returns True if data was loaded, False otherwise."""
+    if not _GH_TOKEN:
+        return False
+    try:
+        import requests as _req
+        headers = {"Authorization": f"token {_GH_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+        r = _req.get(_GH_API, headers=headers, params={"ref": _GH_BRANCH}, timeout=10)
+        if r.status_code == 404:
+            _log.info("GitHub: no scan_history.json yet — starting fresh.")
+            return False
+        r.raise_for_status()
+        content = base64.b64decode(r.json()["content"]).decode("utf-8")
+        parsed = json.loads(content)
+        SCAN_HISTORY_FILE.write_text(content, encoding="utf-8")
+        _log.info("GitHub pull: loaded %d scans.", len(parsed))
+        return True
+    except Exception as exc:
+        _log.warning("GitHub pull failed: %s", exc)
+        return False
+
+
+def _github_push() -> None:
+    """Upload the current scan_history.json to GitHub."""
+    if not _GH_TOKEN or not SCAN_HISTORY_FILE.exists():
+        return
+    try:
+        import requests as _req
+        content_bytes = SCAN_HISTORY_FILE.read_bytes()
+        encoded = base64.b64encode(content_bytes).decode("utf-8")
+        headers = {"Authorization": f"token {_GH_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+        # Fetch current SHA so GitHub accepts the update
+        r = _req.get(_GH_API, headers=headers, params={"ref": _GH_BRANCH}, timeout=10)
+        sha = r.json().get("sha") if r.status_code == 200 else None
+        payload: dict = {
+            "message": f"chore: scan history {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            "content": encoded,
+            "branch": _GH_BRANCH,
+        }
+        if sha:
+            payload["sha"] = sha
+        r = _req.put(_GH_API, headers=headers, json=payload, timeout=15)
+        if r.status_code in (200, 201):
+            _log.info("GitHub push: scan history saved.")
+        else:
+            _log.warning("GitHub push failed: %s %s", r.status_code, r.text[:200])
+    except Exception as exc:
+        _log.warning("GitHub push failed: %s", exc)
+
 
 app = Flask(__name__)
 
@@ -225,6 +287,7 @@ def api_force_scan():
     try:
         from portfolio_monitor import run_once
         run_once(force=True)
+        _github_push()
     except Exception as exc:
         response = jsonify({"ok": False, "error": str(exc)[:200]})
         response.headers["Access-Control-Allow-Origin"] = "*"
@@ -1264,9 +1327,13 @@ def _start_scheduler() -> None:
 
     scheduler = BackgroundScheduler(timezone="America/New_York")
 
+    def _scan_and_push():
+        run_once()
+        _github_push()
+
     # Run every 30 min Mon–Fri 09:30–16:00 ET. run_once() self-filters if market is closed.
     scheduler.add_job(
-        run_once,
+        _scan_and_push,
         CronTrigger(day_of_week="mon-fri", hour="9-15", minute="0,30", timezone="America/New_York"),
         id="portfolio_scan",
         replace_existing=True,
@@ -1281,6 +1348,9 @@ def _start_scheduler() -> None:
     from datetime import datetime as _dt, timedelta as _td
 
     def _startup_scan_if_stale():
+        # Pull latest scan history from GitHub first (survives Render free-tier restarts)
+        if not SCAN_HISTORY_FILE.exists() or SCAN_HISTORY_FILE.stat().st_size < 10:
+            _github_pull()
         history = _load_json(SCAN_HISTORY_FILE, [])
         if history:
             try:
@@ -1300,6 +1370,7 @@ def _start_scheduler() -> None:
         # This prevents duplicate alerts when Render restarts the service and the
         # cooldown state file (signals_state.json) has been lost on the ephemeral FS.
         run_once(force=True, notify=False)
+        _github_push()
 
     scheduler.add_job(
         _startup_scan_if_stale,
