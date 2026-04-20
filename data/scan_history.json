@@ -1,5 +1,180 @@
 [
   {
+    "timestamp": "2026-04-20T17:30:00.005790+00:00",
+    "market_status": "open (ET 13:30)",
+    "forced": false,
+    "tickers_count": 14,
+    "results": [
+      {
+        "name": "AAPL",
+        "ticker": "AAPL",
+        "close": 272.19000244140625,
+        "rsi": 65.85,
+        "sma200_delta_pct": 7.96,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "AMZN",
+        "ticker": "AMZN",
+        "close": 247.61000061035156,
+        "rsi": 72.15,
+        "sma200_delta_pct": 9.7,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "BITB",
+        "ticker": "BITB",
+        "close": 41.1349983215332,
+        "rsi": 60.24,
+        "sma200_delta_pct": -20.85,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "CNDX.L",
+        "ticker": "CNDX.L",
+        "close": 1521.5999755859375,
+        "rsi": 70.15,
+        "sma200_delta_pct": 8.13,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "CSPX.L",
+        "ticker": "CSPX.L",
+        "close": 762.9600219726562,
+        "rsi": 69.88,
+        "sma200_delta_pct": 6.61,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "EIMI.L",
+        "ticker": "EIMI.L",
+        "close": 51.65999984741211,
+        "rsi": 65.1,
+        "sma200_delta_pct": 15.28,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "IMEU.L",
+        "ticker": "IMEU.L",
+        "close": 3375.5,
+        "rsi": 62.43,
+        "sma200_delta_pct": 7.66,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "IREN",
+        "ticker": "IREN",
+        "close": 48.2599983215332,
+        "rsi": 65.22,
+        "sma200_delta_pct": 18.94,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "META",
+        "ticker": "META",
+        "close": 672.780029296875,
+        "rsi": 63.6,
+        "sma200_delta_pct": -1.07,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "MSFT",
+        "ticker": "MSFT",
+        "close": 419.16009521484375,
+        "rsi": 68.38,
+        "sma200_delta_pct": -10.84,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "MSTR",
+        "ticker": "MSTR",
+        "close": 166.9199981689453,
+        "rsi": 72.11,
+        "sma200_delta_pct": -30.74,
+        "buy_score": 0,
+        "sell_score": 3,
+        "buy_passes": false,
+        "sell_passes": true
+      },
+      {
+        "name": "NVDA",
+        "ticker": "NVDA",
+        "close": 199.56500244140625,
+        "rsi": 67.69,
+        "sma200_delta_pct": 9.67,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "ORCL",
+        "ticker": "ORCL",
+        "close": 175.83999633789062,
+        "rsi": 67.74,
+        "sma200_delta_pct": -17.75,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "TSLA",
+        "ticker": "TSLA",
+        "close": 392.0000915527344,
+        "rsi": 56.13,
+        "sma200_delta_pct": -1.82,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      }
+    ],
+    "alerts_sent": [
+      {
+        "ticker": "MSTR",
+        "name": "MSTR",
+        "side": "SELL",
+        "score": 3,
+        "indicators": "SMA200, RSI14, Bollinger",
+        "ai_sentiment": "HOLD",
+        "whatsapp_sent": true,
+        "timestamp": "2026-04-20T17:30:28.414382+00:00"
+      }
+    ],
+    "errors": []
+  },
+  {
     "timestamp": "2026-04-20T17:00:00.004358+00:00",
     "market_status": "open (ET 13:00)",
     "forced": false,
