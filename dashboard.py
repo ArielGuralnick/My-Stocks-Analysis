@@ -1331,10 +1331,10 @@ def _start_scheduler() -> None:
         run_once()
         _github_push()
 
-    # Run every 30 min Mon–Fri 09:30–16:00 ET. run_once() self-filters if market is closed.
+    # Run every 2 hours Mon–Fri 09:30–16:00 ET. run_once() self-filters if market is closed.
     scheduler.add_job(
         _scan_and_push,
-        CronTrigger(day_of_week="mon-fri", hour="9-15", minute="0,30", timezone="America/New_York"),
+        CronTrigger(day_of_week="mon-fri", hour="9,11,13,15", minute="30", timezone="America/New_York"),
         id="portfolio_scan",
         replace_existing=True,
         misfire_grace_time=300,
@@ -1383,7 +1383,7 @@ def _start_scheduler() -> None:
 
     scheduler.start()
     logging.getLogger("dashboard").info(
-        "Scheduler started — initial scan in ~5s, then every 30 min Mon–Fri 09:30–16:00 ET"
+        "Scheduler started — initial scan in ~5s, then every 2h Mon–Fri 09:30–16:00 ET"
     )
 
 
