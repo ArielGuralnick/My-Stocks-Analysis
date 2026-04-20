@@ -1,5 +1,169 @@
 [
   {
+    "timestamp": "2026-04-20T03:50:31.359444+00:00",
+    "market_status": "weekend (Sunday)",
+    "forced": true,
+    "tickers_count": 14,
+    "results": [
+      {
+        "name": "AAPL",
+        "ticker": "AAPL",
+        "close": 270.2300109863281,
+        "rsi": 64.18,
+        "sma200_delta_pct": 7.31,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "AMZN",
+        "ticker": "AMZN",
+        "close": 250.55999755859375,
+        "rsi": 76.57,
+        "sma200_delta_pct": 11.07,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "BITB",
+        "ticker": "BITB",
+        "close": 42.09000015258789,
+        "rsi": 66.42,
+        "sma200_delta_pct": -19.16,
+        "buy_score": 0,
+        "sell_score": 2,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "CNDX.L",
+        "ticker": "CNDX.L",
+        "close": 1533.0,
+        "rsi": 73.87,
+        "sma200_delta_pct": 9.03,
+        "buy_score": 1,
+        "sell_score": 2,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "CSPX.L",
+        "ticker": "CSPX.L",
+        "close": 766.8400268554688,
+        "rsi": 73.06,
+        "sma200_delta_pct": 7.22,
+        "buy_score": 1,
+        "sell_score": 2,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "EIMI.L",
+        "ticker": "EIMI.L",
+        "close": 52.40999984741211,
+        "rsi": 70.35,
+        "sma200_delta_pct": 17.11,
+        "buy_score": 1,
+        "sell_score": 2,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "IMEU.L",
+        "ticker": "IMEU.L",
+        "close": 3399.0,
+        "rsi": 66.22,
+        "sma200_delta_pct": 8.49,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "IREN",
+        "ticker": "IREN",
+        "close": 48.119998931884766,
+        "rsi": 65.0,
+        "sma200_delta_pct": 19.07,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "META",
+        "ticker": "META",
+        "close": 688.5499877929688,
+        "rsi": 69.82,
+        "sma200_delta_pct": 1.22,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "MSFT",
+        "ticker": "MSFT",
+        "close": 422.7900085449219,
+        "rsi": 71.7,
+        "sma200_delta_pct": -10.13,
+        "buy_score": 0,
+        "sell_score": 3,
+        "buy_passes": false,
+        "sell_passes": true
+      },
+      {
+        "name": "MSTR",
+        "ticker": "MSTR",
+        "close": 166.52000427246094,
+        "rsi": 71.95,
+        "sma200_delta_pct": -31.24,
+        "buy_score": 1,
+        "sell_score": 3,
+        "buy_passes": false,
+        "sell_passes": true
+      },
+      {
+        "name": "NVDA",
+        "ticker": "NVDA",
+        "close": 201.67999267578125,
+        "rsi": 71.37,
+        "sma200_delta_pct": 10.96,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "ORCL",
+        "ticker": "ORCL",
+        "close": 175.05999755859375,
+        "rsi": 67.32,
+        "sma200_delta_pct": -18.22,
+        "buy_score": 1,
+        "sell_score": 2,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "TSLA",
+        "ticker": "TSLA",
+        "close": 400.6199951171875,
+        "rsi": 60.31,
+        "sma200_delta_pct": 0.44,
+        "buy_score": 2,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      }
+    ],
+    "alerts_sent": [],
+    "errors": []
+  },
+  {
     "timestamp": "2026-04-19T23:48:02.388202+00:00",
     "market_status": "weekend (Sunday)",
     "forced": true,
