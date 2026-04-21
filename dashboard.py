@@ -19,6 +19,40 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except ImportError:  # pragma: no cover
+    from backports.zoneinfo import ZoneInfo  # type: ignore
+
+# All displayed times (dashboard, logs synthesized from scan history, cooldown
+# expiry labels, "last refreshed" stamp) are rendered in Jerusalem local time.
+# Storage remains UTC ISO — only the presentation layer converts.
+JERUSALEM_TZ = ZoneInfo("Asia/Jerusalem")
+
+
+def _fmt_jerusalem(iso_str: str, with_tz: bool = True) -> str:
+    """Convert a stored UTC ISO timestamp to 'YYYY-MM-DD HH:MM IDT/IST'.
+    Falls back to a raw slice if parsing fails."""
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local = dt.astimezone(JERUSALEM_TZ)
+        if with_tz:
+            tz_abbr = local.strftime("%Z") or "Jerusalem"
+            return local.strftime(f"%Y-%m-%d %H:%M {tz_abbr}")
+        return local.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return iso_str[:16].replace("T", " ")
+
+
+def _now_jerusalem_str() -> str:
+    now = datetime.now(tz=JERUSALEM_TZ)
+    tz_abbr = now.strftime("%Z") or "Jerusalem"
+    return now.strftime(f"%Y-%m-%d %H:%M {tz_abbr}")
+
 import pandas as pd
 import yaml
 from flask import Flask, jsonify, render_template_string, request
@@ -227,9 +261,13 @@ def _get_cooldowns() -> dict:
         if remaining.total_seconds() <= 0:
             continue
         hours_left = remaining.total_seconds() / 3600
+        last_local = last.astimezone(JERUSALEM_TZ)
+        expires_local = expires.astimezone(JERUSALEM_TZ)
+        tz_abbr_last = last_local.strftime("%Z") or "Jerusalem"
+        tz_abbr_exp = expires_local.strftime("%Z") or "Jerusalem"
         result.setdefault(ticker, {})[side] = {
-            "alerted_at": last.strftime("%Y-%m-%d %H:%M UTC"),
-            "expires": expires.strftime("%Y-%m-%d %H:%M UTC"),
+            "alerted_at": last_local.strftime(f"%Y-%m-%d %H:%M {tz_abbr_last}"),
+            "expires": expires_local.strftime(f"%Y-%m-%d %H:%M {tz_abbr_exp}"),
             "hours_left": round(hours_left, 1),
         }
     return result
@@ -256,7 +294,7 @@ def _synthesize_logs_from_history(n: int) -> list[str]:
             ts = datetime.fromisoformat(ts_str)
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=timezone.utc)
-            ts_fmt = ts.strftime("%Y-%m-%d %H:%M:%S")
+            ts_fmt = ts.astimezone(JERUSALEM_TZ).strftime("%Y-%m-%d %H:%M:%S")
         except Exception:
             ts_fmt = ts_str[:19].replace("T", " ") if ts_str else "????-??-?? ??:??:??"
 
@@ -310,9 +348,19 @@ def _get_recent_logs(n: int = 80) -> list[str]:
     return _synthesize_logs_from_history(n)
 
 
+def _attach_display_times(scans: list) -> None:
+    """Pre-compute a Jerusalem-local 'display_time' string on each scan and
+    its alerts, so the Jinja template doesn't have to do any timezone math."""
+    for scan in scans:
+        scan["display_time"] = _fmt_jerusalem(scan.get("timestamp", ""), with_tz=False)
+        for alert in scan.get("alerts_sent", []) or []:
+            alert["display_time"] = _fmt_jerusalem(alert.get("timestamp", ""), with_tz=False)
+
+
 @app.route("/")
 def index():
     scans = _load_json(SCAN_HISTORY_FILE, [])
+    _attach_display_times(scans)
     cooldowns = _get_cooldowns()
     logs = _get_recent_logs(80)
 
@@ -328,7 +376,7 @@ def index():
         cooldowns=cooldowns,
         all_alerts=all_alerts[:30],
         logs=logs,
-        now=datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        now=_now_jerusalem_str(),
     )
 
 
@@ -423,6 +471,7 @@ def _sanitize_json(obj):
 def api_data():
     """JSON endpoint for the static Netlify dashboard to fetch live data."""
     scans = _load_json(SCAN_HISTORY_FILE, [])
+    _attach_display_times(scans)
     cooldowns = _get_cooldowns()
     logs = _get_recent_logs(80)
 
@@ -436,7 +485,7 @@ def api_data():
         "cooldowns": cooldowns,
         "all_alerts": all_alerts[:30],
         "logs": [l.rstrip("\n") for l in logs],
-        "now": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "now": _now_jerusalem_str(),
     }))
     response.headers["Access-Control-Allow-Origin"] = "*"
     return response
@@ -989,7 +1038,7 @@ pre.logs {
     <tbody>
     {% for s in scans[:15] %}
     <tr>
-        <td>{{ s.timestamp[:16].replace('T', ' ') }}</td>
+        <td>{{ s.display_time or s.timestamp[:16].replace('T', ' ') }}</td>
         <td>
             {{ s.market_status }}
             {% if s.forced %}<span class="badge badge-forced">FORCED</span>{% endif %}
@@ -1037,7 +1086,7 @@ pre.logs {
 
 <!-- LATEST SCAN RESULTS -->
 <div class="card" style="margin-bottom: 1.25rem;">
-    <div class="card-title">Latest Scan Results{% if scans %} — {{ scans[0].timestamp[:16].replace('T', ' ') }} UTC{% endif %}</div>
+    <div class="card-title">Latest Scan Results{% if scans %} — {{ scans[0].display_time or scans[0].timestamp[:16].replace('T', ' ') }}{% endif %}</div>
     {% if scans and scans[0].results %}
     <table>
     <thead><tr><th>Ticker</th><th>Name</th><th>Close</th><th>RSI</th><th>vs SMA200</th><th>Buy</th><th>Sell</th></tr></thead>
@@ -1085,7 +1134,7 @@ pre.logs {
     <tbody>
     {% for a in all_alerts %}
     <tr>
-        <td>{{ a.timestamp[:16].replace('T', ' ') }}</td>
+        <td>{{ a.display_time or a.timestamp[:16].replace('T', ' ') }}</td>
         <td><strong>{{ a.ticker }}</strong></td>
         <td><span class="badge {% if a.side == 'BUY' %}badge-buy{% else %}badge-sell{% endif %}">{{ a.side }}</span></td>
         <td class="score">{{ a.score }}/4</td>
