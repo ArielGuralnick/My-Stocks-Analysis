@@ -239,20 +239,67 @@ def is_us_market_open(now: Optional[datetime] = None) -> tuple[bool, str]:
 # STATE (anti-spam cooldown)
 # ---------------------------------------------------------------------------
 
+def _hydrate_state_from_history(state: dict) -> dict:
+    """Merge alerts from scan_history.json into the in-memory state.
+
+    signals_state.json lives on Render's ephemeral disk and is wiped on every
+    restart, but scan_history.json is pushed to GitHub and pulled back on
+    startup. Without this merge, a restart between the 48h cooldown window
+    and the next scan causes duplicate WhatsApp alerts (the cooldown check
+    sees an empty state). Walk the retained scans and, for each successful
+    (ticker, side) alert, record the most recent timestamp.
+    """
+    history = load_scan_history()
+    if not isinstance(history, list) or not history:
+        return state
+
+    for scan in history:
+        for alert in scan.get("alerts_sent", []) or []:
+            if not alert.get("whatsapp_sent"):
+                continue
+            ticker = alert.get("ticker")
+            side = alert.get("side")
+            ts_str = alert.get("timestamp")
+            if not (ticker and side and ts_str):
+                continue
+            try:
+                ts = datetime.fromisoformat(ts_str)
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
+            existing = state.get(ticker, {}).get(side)
+            keep_new = True
+            if existing:
+                try:
+                    existing_dt = datetime.fromisoformat(existing)
+                    if existing_dt.tzinfo is None:
+                        existing_dt = existing_dt.replace(tzinfo=timezone.utc)
+                    keep_new = ts > existing_dt
+                except Exception:
+                    keep_new = True
+            if keep_new:
+                state.setdefault(ticker, {})[side] = ts.isoformat()
+    return state
+
+
 def load_state() -> dict:
     """State shape: {ticker: {"BUY": iso_utc}}."""
-    if not STATE_FILE.exists():
-        return {}
-    try:
-        with STATE_FILE.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            log.warning("signals_state.json is not a dict — resetting.")
-            return {}
-        return data
-    except Exception as e:
-        log.error("Failed to read signals_state.json: %s — resetting.", e)
-        return {}
+    data: dict = {}
+    if STATE_FILE.exists():
+        try:
+            with STATE_FILE.open("r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                data = loaded
+            else:
+                log.warning("signals_state.json is not a dict — resetting.")
+        except Exception as e:
+            log.error("Failed to read signals_state.json: %s — resetting.", e)
+            data = {}
+    # Always merge scan_history.json in — it's the persistent source of truth
+    # across Render restarts (pushed to GitHub), whereas signals_state.json is not.
+    return _hydrate_state_from_history(data)
 
 
 def save_state(state: dict) -> None:
