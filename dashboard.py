@@ -118,7 +118,7 @@ def _github_push() -> None:
         r = _req.get(_GH_API, headers=headers, params={"ref": _GH_BRANCH}, timeout=10)
         sha = r.json().get("sha") if r.status_code == 200 else None
         payload: dict = {
-            "message": f"chore: scan history {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            "message": f"chore: scan history {_now_jerusalem_str()}",
             "content": encoded,
             "branch": _GH_BRANCH,
         }
@@ -421,7 +421,7 @@ def api_quotes():
     response = jsonify({
         "ok": True,
         "quotes": quotes,
-        "fetched_at": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "fetched_at": _now_jerusalem_str(),
     })
     response.headers["Access-Control-Allow-Origin"] = "*"
     return response

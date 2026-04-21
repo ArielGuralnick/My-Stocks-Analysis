@@ -782,7 +782,7 @@ pre.logs {
     if (data.scans.length > 0) {
       var scansHtml = '';
       data.scans.slice(0, 15).forEach(function(s) {
-        var ts = (s.timestamp || '').slice(0, 16).replace('T', ' ');
+        var ts = s.display_time || (s.timestamp || '').slice(0, 16).replace('T', ' ');
         var errCount = (s.errors || []).length;
         var forcedBadge = s.forced ? ' <span class="badge badge-forced">FORCED</span>' : '';
         scansHtml += '<tr>'
@@ -802,9 +802,9 @@ pre.logs {
     /* Latest scan results */
     var latestScan = data.scans.length > 0 ? data.scans[0] : null;
     if (latestScan && latestScan.results && latestScan.results.length > 0) {
-      var scanTs = (latestScan.timestamp || '').slice(0, 16).replace('T', ' ');
+      var scanTs = latestScan.display_time || (latestScan.timestamp || '').slice(0, 16).replace('T', ' ');
       document.getElementById('scanResultsTitle').textContent =
-        'Latest Scan Results — ' + scanTs + ' UTC';
+        'Latest Scan Results — ' + scanTs;
       var resHtml = '';
       latestScan.results.forEach(function(r) {
         var rsiColor = r.rsi < 35 ? 'var(--green)' : r.rsi > 70 ? 'var(--red)' : '';
@@ -846,7 +846,7 @@ pre.logs {
         var sentCell = a.whatsapp_sent
           ? '<span class="badge badge-ok">OK</span>'
           : '<span class="badge badge-fail">FAIL</span>';
-        var ts = (a.timestamp || '').slice(0, 16).replace('T', ' ');
+        var ts = a.display_time || (a.timestamp || '').slice(0, 16).replace('T', ' ');
         alertHtml += '<tr>'
           + '<td>' + ts + '</td>'
           + '<td><strong style="color:var(--amber-text)">' + (a.ticker || '') + '</strong></td>'

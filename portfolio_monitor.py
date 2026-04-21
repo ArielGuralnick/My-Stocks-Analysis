@@ -133,6 +133,7 @@ LOG_FILE = DATA_DIR / "trading_bot.log"
 COOLDOWN_HOURS = 48                    # Per-ticker cooldown
 MIN_SCAN_INTERVAL_MINUTES = 25         # Minimum minutes between scans (prevents duplicate runs on restart)
 MARKET_TZ = ZoneInfo("America/New_York")
+DISPLAY_TZ = ZoneInfo("Asia/Jerusalem")  # All human-facing times are rendered in Jerusalem local time
 API_MAX_RETRIES = 3                    # Retry count for Anthropic & Green API
 API_RETRY_DELAY = 5                    # Seconds between retries
 
@@ -178,15 +179,27 @@ US_MARKET_HOLIDAYS: set[str] = {
 # LOGGING SETUP
 # ---------------------------------------------------------------------------
 
+class _JerusalemFormatter(logging.Formatter):
+    """Log formatter whose %(asctime)s is rendered in Jerusalem local time
+    (Asia/Jerusalem), regardless of the server's system timezone. Keeps log
+    timestamps consistent with the dashboard and the user's expectations."""
+
+    def formatTime(self, record, datefmt=None):  # type: ignore[override]
+        dt = datetime.fromtimestamp(record.created, tz=timezone.utc).astimezone(DISPLAY_TZ)
+        if datefmt:
+            return dt.strftime(datefmt)
+        return dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
 def _build_logger() -> logging.Logger:
     logger = logging.getLogger("portfolio_monitor")
     if logger.handlers:  # already configured (e.g. re-import)
         return logger
     logger.setLevel(logging.INFO)
 
-    fmt = logging.Formatter(
+    fmt = _JerusalemFormatter(
         fmt="%(asctime)s | %(levelname)-7s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        datefmt="%Y-%m-%d %H:%M:%S %Z",
     )
 
     file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
@@ -217,6 +230,10 @@ def is_us_market_open(now: Optional[datetime] = None) -> tuple[bool, str]:
     else:
         now = now.astimezone(MARKET_TZ)
 
+    jer = now.astimezone(DISPLAY_TZ)
+    jer_hm = jer.strftime("%H:%M")
+    jer_abbr = jer.strftime("%Z") or "Jerusalem"
+
     if now.weekday() >= 5:
         return False, f"weekend ({now.strftime('%A')})"
 
@@ -228,11 +245,11 @@ def is_us_market_open(now: Optional[datetime] = None) -> tuple[bool, str]:
     market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
 
     if now < market_open:
-        return False, f"pre-market (ET {now.strftime('%H:%M')})"
+        return False, f"pre-market ({jer_hm} {jer_abbr} / ET {now.strftime('%H:%M')})"
     if now >= market_close:
-        return False, f"after-hours (ET {now.strftime('%H:%M')})"
+        return False, f"after-hours ({jer_hm} {jer_abbr} / ET {now.strftime('%H:%M')})"
 
-    return True, f"open (ET {now.strftime('%H:%M')})"
+    return True, f"open ({jer_hm} {jer_abbr} / ET {now.strftime('%H:%M')})"
 
 
 # ---------------------------------------------------------------------------
@@ -1275,9 +1292,10 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.test:
+        _jer_now = datetime.now(tz=DISPLAY_TZ)
         msg = (
             "✅ Portfolio Hybrid Monitor — test message\n"
-            f"Sent at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"Sent at {_jer_now.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
             "If you see this, Green API is configured correctly."
         )
         ok = send_whatsapp(msg)
@@ -1307,11 +1325,11 @@ def main() -> None:
             log.error("Unhandled exception in scan loop: %s", e)
             log.debug(traceback.format_exc())
 
-        next_run = datetime.now() + timedelta(seconds=CHECK_INTERVAL_SECONDS)
+        next_run = datetime.now(tz=DISPLAY_TZ) + timedelta(seconds=CHECK_INTERVAL_SECONDS)
         log.info(
             "Sleeping %d min… next run at %s",
             CHECK_INTERVAL_SECONDS // 60,
-            next_run.strftime("%Y-%m-%d %H:%M:%S"),
+            next_run.strftime("%Y-%m-%d %H:%M:%S %Z"),
         )
         try:
             time.sleep(CHECK_INTERVAL_SECONDS)
