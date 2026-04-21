@@ -166,42 +166,148 @@ def _load_json(path: Path, default=None):
 
 
 def _get_cooldowns() -> dict:
-    state = _load_json(STATE_FILE, {})
-    if not isinstance(state, dict):
-        return {}
+    """Compute active cooldowns.
+
+    Derived from scan_history.json rather than signals_state.json: the scan
+    history is the persisted source of truth (pushed to GitHub and pulled
+    back on startup), while signals_state.json lives on Render's ephemeral
+    disk and is wiped on every restart. We walk the retained scans and, for
+    each (ticker, side) pair, keep the most recent alert timestamp where the
+    WhatsApp send actually succeeded. If that timestamp + COOLDOWN_HOURS is
+    still in the future, the cooldown is active.
+    """
     now = datetime.now(tz=timezone.utc)
-    result = {}
-    for ticker, sides in state.items():
-        if not isinstance(sides, dict):
-            continue
-        for side, iso_str in sides.items():
+    scans = _load_json(SCAN_HISTORY_FILE, [])
+    if not isinstance(scans, list):
+        scans = []
+
+    # Map (ticker, side) -> most recent successful alert datetime
+    latest: dict[tuple[str, str], datetime] = {}
+    for scan in scans:
+        for alert in scan.get("alerts_sent", []) or []:
+            if not alert.get("whatsapp_sent"):
+                continue
+            ticker = alert.get("ticker")
+            side = alert.get("side")
+            ts_str = alert.get("timestamp")
+            if not (ticker and side and ts_str):
+                continue
             try:
-                last = datetime.fromisoformat(iso_str)
-                if last.tzinfo is None:
-                    last = last.replace(tzinfo=timezone.utc)
-                expires = last + timedelta(hours=COOLDOWN_HOURS)
-                remaining = expires - now
-                if remaining.total_seconds() > 0:
-                    hours_left = remaining.total_seconds() / 3600
-                    result.setdefault(ticker, {})[side] = {
-                        "alerted_at": last.strftime("%Y-%m-%d %H:%M UTC"),
-                        "expires": expires.strftime("%Y-%m-%d %H:%M UTC"),
-                        "hours_left": round(hours_left, 1),
-                    }
+                ts = datetime.fromisoformat(ts_str)
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
             except Exception:
                 continue
+            key = (ticker, side)
+            if key not in latest or ts > latest[key]:
+                latest[key] = ts
+
+    # Merge in legacy signals_state.json entries (useful for local dev where
+    # the state file is the only source).
+    state = _load_json(STATE_FILE, {})
+    if isinstance(state, dict):
+        for ticker, sides in state.items():
+            if not isinstance(sides, dict):
+                continue
+            for side, iso_str in sides.items():
+                try:
+                    ts = datetime.fromisoformat(iso_str)
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                except Exception:
+                    continue
+                key = (ticker, side)
+                if key not in latest or ts > latest[key]:
+                    latest[key] = ts
+
+    result: dict = {}
+    for (ticker, side), last in latest.items():
+        expires = last + timedelta(hours=COOLDOWN_HOURS)
+        remaining = expires - now
+        if remaining.total_seconds() <= 0:
+            continue
+        hours_left = remaining.total_seconds() / 3600
+        result.setdefault(ticker, {})[side] = {
+            "alerted_at": last.strftime("%Y-%m-%d %H:%M UTC"),
+            "expires": expires.strftime("%Y-%m-%d %H:%M UTC"),
+            "hours_left": round(hours_left, 1),
+        }
     return result
 
 
+def _synthesize_logs_from_history(n: int) -> list[str]:
+    """Build recent-log lines from scan_history.json.
+
+    Used when the real trading_bot.log file is missing or empty (e.g. on
+    Render's ephemeral FS after a restart — the scan history is pulled back
+    from GitHub but the log file is gone). The scan record already contains
+    timestamps, market status, alerts, and errors, so we can reconstruct a
+    useful activity view without the original log file.
+    """
+    scans = _load_json(SCAN_HISTORY_FILE, [])
+    if not isinstance(scans, list) or not scans:
+        return []
+
+    lines: list[str] = []
+    # scan_history is newest-first; walk oldest-first so logs read chronologically
+    for scan in reversed(scans):
+        ts_str = scan.get("timestamp", "")
+        try:
+            ts = datetime.fromisoformat(ts_str)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            ts_fmt = ts.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            ts_fmt = ts_str[:19].replace("T", " ") if ts_str else "????-??-?? ??:??:??"
+
+        market = scan.get("market_status", "?")
+        tickers_count = scan.get("tickers_count", 0)
+        forced_tag = " [MANUAL]" if scan.get("forced") else ""
+        lines.append(
+            f"{ts_fmt} | INFO    | ===== SCAN start — market {market} "
+            f"({tickers_count} tickers){forced_tag} =====\n"
+        )
+
+        for alert in scan.get("alerts_sent", []) or []:
+            ticker = alert.get("ticker", "?")
+            side = alert.get("side", "?")
+            score = alert.get("score", "?")
+            indicators = alert.get("indicators", "")
+            ai = alert.get("ai_sentiment") or "n/a"
+            sent = "OK" if alert.get("whatsapp_sent") else "FAIL"
+            lines.append(
+                f"{ts_fmt} | INFO    | ALERT {side} {ticker} "
+                f"(score {score}/4: {indicators}) AI={ai} WhatsApp={sent}\n"
+            )
+
+        for err in scan.get("errors", []) or []:
+            ticker = err.get("ticker", "?")
+            msg = err.get("error", "")
+            lines.append(
+                f"{ts_fmt} | ERROR   | {ticker}: {msg}\n"
+            )
+
+        lines.append(f"{ts_fmt} | INFO    | ===== SCAN end =====\n")
+
+    return lines[-n:]
+
+
 def _get_recent_logs(n: int = 80) -> list[str]:
-    if not LOG_FILE.exists():
-        return []
-    try:
-        with LOG_FILE.open("r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-        return lines[-n:]
-    except Exception:
-        return []
+    """Return the last `n` log lines.
+
+    Prefers the real trading_bot.log file when it exists and has content.
+    Falls back to synthesizing lines from scan_history.json (which is pushed
+    to GitHub and survives Render restarts, unlike the log file itself).
+    """
+    if LOG_FILE.exists():
+        try:
+            with LOG_FILE.open("r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+            if lines:
+                return lines[-n:]
+        except Exception:
+            pass
+    return _synthesize_logs_from_history(n)
 
 
 @app.route("/")
@@ -287,7 +393,7 @@ def api_force_scan():
 
     try:
         from portfolio_monitor import run_once
-        run_once(force=True)
+        run_once(force=True, manual=True)
         _github_push()
     except Exception as exc:
         response = jsonify({"ok": False, "error": str(exc)[:200]})

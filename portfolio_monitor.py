@@ -971,11 +971,14 @@ def format_hybrid_alert(
 # SCAN (hybrid workflow)
 # ---------------------------------------------------------------------------
 
-def run_once(force: bool = False, notify: bool = True) -> None:
+def run_once(force: bool = False, notify: bool = True, manual: bool = False) -> None:
     """Run a single hybrid scan. Skips if the market is closed unless force=True.
     Pass notify=False to run analysis and populate dashboard data without sending
     any WhatsApp alerts (used by the startup scan to avoid re-alerting after
     a Render service restart when the cooldown state file may have been lost).
+    Pass manual=True when the scan was explicitly triggered by the user (e.g. the
+    "Force Scan" button) — this is recorded as "forced" in the scan history so
+    restart-triggered background scans aren't mis-labelled as user-initiated.
     """
     # Prevent concurrent scans (e.g. scheduler + startup job firing simultaneously)
     if not _scan_lock.acquire(blocking=False):
@@ -983,12 +986,12 @@ def run_once(force: bool = False, notify: bool = True) -> None:
         return
 
     try:
-        _run_once_inner(force=force, notify=notify)
+        _run_once_inner(force=force, notify=notify, manual=manual)
     finally:
         _scan_lock.release()
 
 
-def _run_once_inner(force: bool = False, notify: bool = True) -> None:
+def _run_once_inner(force: bool = False, notify: bool = True, manual: bool = False) -> None:
     """Internal scan implementation (called only while _scan_lock is held)."""
     # Guard: skip if a scan already ran recently (protects against rapid restarts
     # re-sending alerts before the 48-hour cooldown state is written to disk).
@@ -1054,7 +1057,7 @@ def _run_once_inner(force: bool = False, notify: bool = True) -> None:
         save_scan_record({
             "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             "market_status": reason,
-            "forced": force,
+            "forced": manual,
             "tickers_count": 0,
             "results": [],
             "alerts_sent": [],
@@ -1069,7 +1072,7 @@ def _run_once_inner(force: bool = False, notify: bool = True) -> None:
     scan_record: dict = {
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         "market_status": reason,
-        "forced": force,
+        "forced": manual,
         "tickers_count": len(tickers),
         "results": [],
         "alerts_sent": [],
