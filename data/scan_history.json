@@ -1,5 +1,174 @@
 [
   {
+    "timestamp": "2026-04-21T19:30:00.008211+00:00",
+    "market_status": "open (ET 15:30)",
+    "forced": false,
+    "tickers_count": 14,
+    "results": [
+      {
+        "name": "AMZN",
+        "ticker": "AMZN",
+        "close": 251.41000366210938,
+        "rsi": 74.79,
+        "sma200_delta_pct": 11.31,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "BITB",
+        "ticker": "BITB",
+        "close": 41.154998779296875,
+        "rsi": 60.22,
+        "sma200_delta_pct": -20.67,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "CNDX.L",
+        "ticker": "CNDX.L",
+        "close": 1526.0,
+        "rsi": 70.77,
+        "sma200_delta_pct": 8.34,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "CSPX.L",
+        "ticker": "CSPX.L",
+        "close": 762.02001953125,
+        "rsi": 69.09,
+        "sma200_delta_pct": 6.41,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "EIMI.L",
+        "ticker": "EIMI.L",
+        "close": 51.400001525878906,
+        "rsi": 63.34,
+        "sma200_delta_pct": 14.54,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "IMEU.L",
+        "ticker": "IMEU.L",
+        "close": 3343.0,
+        "rsi": 57.54,
+        "sma200_delta_pct": 6.56,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "IREN",
+        "ticker": "IREN",
+        "close": 46.3849983215332,
+        "rsi": 59.45,
+        "sma200_delta_pct": 13.89,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "META",
+        "ticker": "META",
+        "close": 674.0,
+        "rsi": 63.61,
+        "sma200_delta_pct": -0.86,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "MSFT",
+        "ticker": "MSFT",
+        "close": 426.51348876953125,
+        "rsi": 70.78,
+        "sma200_delta_pct": -9.2,
+        "buy_score": 0,
+        "sell_score": 2,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "MSTR",
+        "ticker": "MSTR",
+        "close": 169.23500061035156,
+        "rsi": 71.93,
+        "sma200_delta_pct": -29.44,
+        "buy_score": 0,
+        "sell_score": 3,
+        "buy_passes": false,
+        "sell_passes": true
+      },
+      {
+        "name": "NVDA",
+        "ticker": "NVDA",
+        "close": 201.05999755859375,
+        "rsi": 69.74,
+        "sma200_delta_pct": 10.36,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "ORCL",
+        "ticker": "ORCL",
+        "close": 184.52099609375,
+        "rsi": 71.94,
+        "sma200_delta_pct": -13.59,
+        "buy_score": 0,
+        "sell_score": 3,
+        "buy_passes": false,
+        "sell_passes": true
+      },
+      {
+        "name": "TSLA",
+        "ticker": "TSLA",
+        "close": 390.07000732421875,
+        "rsi": 55.19,
+        "sma200_delta_pct": -2.39,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      }
+    ],
+    "alerts_sent": [
+      {
+        "ticker": "ORCL",
+        "name": "ORCL",
+        "side": "SELL",
+        "score": 3,
+        "indicators": "SMA200, RSI14, Bollinger",
+        "ai_sentiment": "BUY",
+        "whatsapp_sent": true,
+        "timestamp": "2026-04-21T19:30:27.910526+00:00"
+      }
+    ],
+    "errors": [
+      {
+        "ticker": "AAPL",
+        "error": "No data from yfinance"
+      }
+    ]
+  },
+  {
     "timestamp": "2026-04-21T17:30:00.021605+00:00",
     "market_status": "open (ET 13:30)",
     "forced": false,
