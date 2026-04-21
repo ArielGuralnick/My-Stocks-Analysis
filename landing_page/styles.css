@@ -496,8 +496,11 @@ main {
   grid-template-columns: 1fr;
   gap: 1.5rem;
 }
-@media (min-width: 900px) {
-  .plates { grid-template-columns: repeat(3, 1fr); }
+@media (min-width: 600px) {
+  .plates { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1200px) {
+  .plates { grid-template-columns: repeat(4, 1fr); }
 }
 
 .plate {
@@ -528,6 +531,7 @@ main {
 .plate--one   { --plate-color: var(--cyan); }
 .plate--two   { --plate-color: var(--amber-text); }
 .plate--three { --plate-color: var(--red); }
+.plate--four  { --plate-color: #7c6fcd; }
 
 .plate__numeral {
   display: block;
@@ -872,7 +876,128 @@ main {
   .dp-row { font-size: 0.5rem; padding: 0.35rem 0.6rem; }
 }
 
-/* ─── 12. Form Section ─────────────────────────────���──────────────── */
+/* ─── 12. Backtest Section ─────────────────────────────────────────── */
+.backtest-section {
+  padding: clamp(4rem, 10vh, 8rem) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.bt-widget {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.bt-compare {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: clamp(1.5rem, 4vw, 3rem);
+  margin-bottom: 1rem;
+}
+
+.bt-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.bt-side__label {
+  font-family: var(--f-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.22em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+
+.bt-side__return {
+  font-family: var(--f-display);
+  font-size: clamp(2.4rem, 5vw, 3.8rem);
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--text-dim);
+}
+.bt-side__return--pos { color: var(--cyan); }
+.bt-side__return--neg { color: var(--red); }
+
+.bt-side__meta {
+  font-family: var(--f-mono);
+  font-size: 0.58rem;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+}
+
+.bt-vs {
+  font-family: var(--f-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: var(--text-ghost);
+  flex-shrink: 0;
+}
+
+.bt-verdict {
+  font-family: var(--f-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--amber-text);
+  padding: 0.7rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  margin-bottom: 1.5rem;
+}
+
+.bt-table {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+  overflow-x: auto;
+}
+
+.bt-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 0.7fr 0.7fr;
+  gap: 0;
+  font-family: var(--f-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.bt-row:last-child { border-bottom: none; }
+
+.bt-row--head {
+  font-size: 0.5rem;
+  letter-spacing: 0.18em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  background: rgba(255,255,255,0.02);
+}
+
+.bt-ticker { color: var(--amber-text); font-weight: 500; }
+.bt-pos    { color: var(--cyan); }
+.bt-neg    { color: var(--text-dim); }
+
+.bt-note {
+  font-family: var(--f-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.08em;
+  color: var(--text-ghost);
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 520px) {
+  .bt-compare { flex-direction: column; gap: 1.25rem; }
+  .bt-vs { align-self: center; }
+  .bt-row { font-size: 0.52rem; padding: 0.45rem 0.7rem; }
+}
+
+/* ─── 13. Form Section ─────────────────────────────────────────────── */
 .form-section {
   padding: clamp(4rem, 10vh, 8rem) 0;
   border-bottom: 1px solid var(--border);

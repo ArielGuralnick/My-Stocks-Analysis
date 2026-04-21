@@ -140,10 +140,10 @@
 
     <div class="section-head">
       <span class="section-head__tag">§ 01 · WORKFLOW</span>
-      <h2 class="section-head__title">The&nbsp;<em>three-step</em>&nbsp;filter.</h2>
+      <h2 class="section-head__title">The&nbsp;<em>four-step</em>&nbsp;filter.</h2>
       <p class="section-head__lede">
-        One script. Three layers of scrutiny. No manual trading. No mock data.
-        Every signal must survive technicals, fundamentals, and cooldown.
+        One script. Four layers of scrutiny. No manual trading. No mock data.
+        Every signal must survive technicals, fundamentals, backtest, and cooldown.
       </p>
     </div>
 
@@ -225,6 +225,30 @@
         </svg>
       </li>
 
+      <li class="plate plate--four reveal">
+        <span class="plate__numeral">04</span>
+        <div class="plate__content">
+          <p class="plate__kicker">2-YEAR&nbsp;BACKTEST&nbsp;&middot;&nbsp;BUILT&nbsp;INTO&nbsp;EVERY&nbsp;ALERT</p>
+          <h3 class="plate__title">Historical&nbsp;edge,<br><em>per&nbsp;signal.</em></h3>
+          <p class="plate__body">
+            Every alert includes a live backtest of the exact strategy that fired —
+            simulated over two years of real price data. See whether your signals
+            historically outperformed simply holding the stock, before you act.
+            <span class="tag">STRATEGY&nbsp;RETURN</span>
+            <span class="tag">BUY&nbsp;&amp;&nbsp;HOLD</span>
+            <span class="tag">WIN&nbsp;RATE</span>
+          </p>
+        </div>
+        <svg class="plate__spark" viewBox="0 0 220 64" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0,52 L18,48 L36,50 L54,38 L72,42 L90,20 L108,24 L126,10 L144,18 L162,8 L180,14 L220,4"
+                fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+          <path d="M0,52 L18,50 L36,52 L54,46 L72,48 L90,44 L108,46 L126,40 L144,42 L162,38 L180,40 L220,36"
+                fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".35" stroke-dasharray="3 2"/>
+          <circle cx="126" cy="10" r="2.4" fill="currentColor"/>
+          <circle cx="126" cy="40" r="2.4" fill="currentColor" opacity=".4"/>
+        </svg>
+      </li>
+
     </ol>
   </section>
 
@@ -277,6 +301,11 @@
                 tailwinds remain intact. Short-term weakness may be a buying window.
               </p>
               <p class="wa__warn">⚠️ AI disagrees with technical signal.</p>
+              <p class="wa__rule"></p>
+              <p class="wa__line"><b>📈 2-Year Backtest</b></p>
+              <p class="wa__line">Strategy: <b>+12.2%</b> (5 trades, 40% win)</p>
+              <p class="wa__line">Buy &amp; Hold: <b style="color:#00d9b8">+38.7%</b></p>
+              <p class="wa__warn">⚠️ Buy &amp; hold outperformed — proceed with caution.</p>
               <span class="wa__time">09:41 ✓✓</span>
             </div>
 
@@ -300,12 +329,75 @@
   </section>
 
 
-  <!-- ─── Dashboard Preview ─── -->
-  <section class="dashboard-section" id="dashboard">
+  <!-- ─── Backtest Section ─── -->
+  <section class="backtest-section" id="backtest">
     <span class="section-numeral" aria-hidden="true">III</span>
 
     <div class="section-head section-head--centered">
-      <span class="section-head__tag">§ 03 · DASHBOARD</span>
+      <span class="section-head__tag">§ 03 · BACKTEST</span>
+      <h2 class="section-head__title">Two&nbsp;years&nbsp;of&nbsp;<em>proof</em>.</h2>
+      <p class="section-head__lede">
+        Every alert includes a live 2-year backtest of the exact signal that fired.
+        See whether the strategy historically beat simply holding the stock — before you act.
+      </p>
+    </div>
+
+    <div class="bt-widget reveal">
+      <div class="bt-compare">
+        <div class="bt-side">
+          <span class="bt-side__label">Signal Strategy</span>
+          <span class="bt-side__return bt-side__return--pos">+31.4%</span>
+          <span class="bt-side__meta">8 trades · 67% win rate</span>
+        </div>
+        <div class="bt-vs">VS</div>
+        <div class="bt-side">
+          <span class="bt-side__label">Buy &amp; Hold</span>
+          <span class="bt-side__return">+24.1%</span>
+          <span class="bt-side__meta">held entire 2 years</span>
+        </div>
+      </div>
+      <div class="bt-verdict">✅ Strategy beat buy &amp; hold — signal has historical edge on this ticker</div>
+
+      <div class="bt-table">
+        <div class="bt-row bt-row--head">
+          <span>Ticker</span><span>Strategy</span><span>Buy &amp; Hold</span><span>Trades</span><span>Win %</span>
+        </div>
+        <div class="bt-row">
+          <span class="bt-ticker">TSLA</span>
+          <span class="bt-pos">+31.4%</span>
+          <span class="bt-neg">+24.1%</span>
+          <span>8</span><span>67%</span>
+        </div>
+        <div class="bt-row">
+          <span class="bt-ticker">AMZN</span>
+          <span class="bt-neg">+12.2%</span>
+          <span class="bt-pos">+38.7%</span>
+          <span>5</span><span>40%</span>
+        </div>
+        <div class="bt-row">
+          <span class="bt-ticker">NVDA</span>
+          <span class="bt-pos">+142.3%</span>
+          <span class="bt-neg">+118.5%</span>
+          <span>11</span><span>73%</span>
+        </div>
+        <div class="bt-row">
+          <span class="bt-ticker">AAPL</span>
+          <span class="bt-neg">+9.8%</span>
+          <span class="bt-pos">+22.4%</span>
+          <span>4</span><span>50%</span>
+        </div>
+      </div>
+      <p class="bt-note">Sample data — actual results calculated live per scan using 2 years of real OHLCV history.</p>
+    </div>
+  </section>
+
+
+  <!-- ─── Dashboard Preview ─── -->
+  <section class="dashboard-section" id="dashboard">
+    <span class="section-numeral" aria-hidden="true">IV</span>
+
+    <div class="section-head section-head--centered">
+      <span class="section-head__tag">§ 04 · DASHBOARD</span>
       <h2 class="section-head__title">The&nbsp;<em>control&nbsp;room</em>.</h2>
       <p class="section-head__lede">
         A live dashboard that tracks every scan, every alert, every cooldown
@@ -362,11 +454,11 @@
 
   <!-- ─── Lead gen form ─── -->
   <section class="form-section" id="form">
-    <span class="section-numeral" aria-hidden="true">IV</span>
+    <span class="section-numeral" aria-hidden="true">V</span>
 
     <div class="form-grid">
       <div class="form-copy">
-        <span class="section-head__tag">§ 04 · ENQUIRY</span>
+        <span class="section-head__tag">§ 05 · ENQUIRY</span>
         <h2 class="form-copy__title">Want&nbsp;the&nbsp;<em>code</em>?</h2>
         <p class="form-copy__lede">
           Leave your details. I'll send you the full prompt and repository,

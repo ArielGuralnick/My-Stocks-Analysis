@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import math
 import os
 import re
 from datetime import datetime, timedelta, timezone
@@ -298,6 +299,20 @@ def api_force_scan():
     return response
 
 
+def _sanitize_json(obj):
+    """Recursively replace NaN/Infinity floats with None so the output is
+    valid RFC-8259 JSON (JS JSON.parse rejects NaN/Infinity)."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_json(v) for v in obj]
+    return obj
+
+
 @app.route("/api/data")
 def api_data():
     """JSON endpoint for the static Netlify dashboard to fetch live data."""
@@ -310,13 +325,13 @@ def api_data():
         for alert in scan.get("alerts_sent", []):
             all_alerts.append(alert)
 
-    response = jsonify({
+    response = jsonify(_sanitize_json({
         "scans": scans[:20],
         "cooldowns": cooldowns,
         "all_alerts": all_alerts[:30],
         "logs": [l.rstrip("\n") for l in logs],
         "now": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-    })
+    }))
     response.headers["Access-Control-Allow-Origin"] = "*"
     return response
 

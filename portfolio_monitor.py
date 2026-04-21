@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import logging
 import os
 import re
@@ -268,7 +269,7 @@ def save_state(state: dict) -> None:
 # SCAN HISTORY (for dashboard)
 # ---------------------------------------------------------------------------
 
-MAX_SCAN_HISTORY = 50  # Keep last N scans
+SCAN_HISTORY_RETENTION_DAYS = 14  # Keep scans from the last 14 days
 
 def load_scan_history() -> list[dict]:
     if not SCAN_HISTORY_FILE.exists():
@@ -281,10 +282,38 @@ def load_scan_history() -> list[dict]:
         return []
 
 
+def _prune_old_scans(history: list[dict]) -> list[dict]:
+    """Remove scan records older than SCAN_HISTORY_RETENTION_DAYS."""
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=SCAN_HISTORY_RETENTION_DAYS)
+    result = []
+    for record in history:
+        try:
+            ts = datetime.fromisoformat(record["timestamp"])
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            if ts >= cutoff:
+                result.append(record)
+        except Exception:
+            result.append(record)  # Keep records with unparseable timestamps
+    return result
+
+
+def _sanitize_nan(obj):
+    """Recursively replace NaN/Infinity floats with None so the JSON output
+    is valid (JS JSON.parse rejects NaN/Infinity)."""
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_nan(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_nan(v) for v in obj]
+    return obj
+
+
 def save_scan_record(record: dict) -> None:
     history = load_scan_history()
-    history.insert(0, record)
-    history = history[:MAX_SCAN_HISTORY]
+    history.insert(0, _sanitize_nan(record))
+    history = _prune_old_scans(history)
     try:
         tmp = SCAN_HISTORY_FILE.with_suffix(".json.tmp")
         with tmp.open("w", encoding="utf-8") as f:
@@ -540,6 +569,99 @@ def evaluate_technical_signals(df: pd.DataFrame) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# BACKTEST
+# ---------------------------------------------------------------------------
+
+def run_backtest(df: pd.DataFrame) -> Optional[dict]:
+    """Simulate the 3/4-signal strategy over the full 2-year history of df.
+
+    Logic mirrors the live scan:
+      - BUY  signal: 3+ of (SMA200-above, RSI<35, MACD-cross-up-5bar, BB-lower-touch)
+      - SELL signal: 3+ of (SMA200-below, RSI>70, MACD-cross-down-5bar, BB-upper-touch)
+      - Entry: buy at next day's open after a BUY signal (not already in position)
+      - Exit:  sell at next day's open after a SELL signal (while in position)
+      - Open position at end of history is closed at the last close price.
+
+    Returns a dict with strategy_return, hold_return, num_trades, win_rate,
+    or None if there is not enough data.
+    """
+    required_cols = {"Close", "Open", "SMA_200", "RSI_14", "MACD", "MACD_SIGNAL",
+                     "BB_LOWER", "BB_UPPER"}
+    if len(df) < 210 or not required_cols.issubset(df.columns):
+        return None
+
+    close      = df["Close"]
+    open_price = df["Open"]
+    sma200     = df["SMA_200"]
+    rsi        = df["RSI_14"]
+    macd       = df["MACD"]
+    macd_sig   = df["MACD_SIGNAL"]
+    bb_lower   = df["BB_LOWER"]
+    bb_upper   = df["BB_UPPER"]
+
+    # Vectorised MACD crossover days (same logic as macd_crossed_*_recently)
+    cross_up   = (macd >= macd_sig) & (macd.shift(1) < macd_sig.shift(1))
+    cross_down = (macd < macd_sig)  & (macd.shift(1) >= macd_sig.shift(1))
+    macd_buy_ind  = cross_up.rolling(5,  min_periods=1).max().astype(bool)
+    macd_sell_ind = cross_down.rolling(5, min_periods=1).max().astype(bool)
+
+    # Per-row signal scores
+    buy_scores = (
+        (close > sma200).astype(int) +
+        (rsi < 35).astype(int) +
+        macd_buy_ind.astype(int) +
+        (close <= bb_lower).astype(int)
+    )
+    sell_scores = (
+        (close < sma200).astype(int) +
+        (rsi > 70).astype(int) +
+        macd_sell_ind.astype(int) +
+        (close >= bb_upper).astype(int)
+    )
+
+    buy_signals  = buy_scores  >= TECHNICAL_SCORE_THRESHOLD
+    sell_signals = sell_scores >= TECHNICAL_SCORE_THRESHOLD
+
+    # Trade simulation: execute at next-day open
+    in_position = False
+    entry_price = 0.0
+    trades: list[float] = []
+
+    for i in range(len(df) - 1):
+        exec_price = float(open_price.iloc[i + 1])
+        if not in_position and buy_signals.iloc[i]:
+            entry_price = exec_price
+            in_position = True
+        elif in_position and sell_signals.iloc[i]:
+            trades.append((exec_price - entry_price) / entry_price)
+            in_position = False
+
+    # Close any open position at last close
+    if in_position:
+        trades.append((float(close.iloc[-1]) - entry_price) / entry_price)
+
+    # Compound returns
+    strategy_mult = 1.0
+    for t in trades:
+        strategy_mult *= (1 + t)
+    strategy_return = round((strategy_mult - 1) * 100, 1)
+
+    # Buy-and-hold return over same period
+    first_close = float(close.dropna().iloc[0])
+    last_close  = float(close.iloc[-1])
+    hold_return = round((last_close - first_close) / first_close * 100, 1)
+
+    win_rate = round(sum(1 for t in trades if t > 0) / len(trades) * 100) if trades else 0
+
+    return {
+        "strategy_return": strategy_return,
+        "hold_return":     hold_return,
+        "num_trades":      len(trades),
+        "win_rate":        win_rate,
+    }
+
+
+# ---------------------------------------------------------------------------
 # NEWS FETCHING (yfinance)
 # ---------------------------------------------------------------------------
 
@@ -785,6 +907,7 @@ def format_hybrid_alert(
     tech: dict,
     llm: Optional[dict],
     side: str,
+    backtest: Optional[dict] = None,
 ) -> str:
     """Format the WhatsApp BUY/SELL alert. Headlines are NEVER included —
     only the AI's distilled analysis (if available)."""
@@ -815,6 +938,22 @@ def format_hybrid_alert(
     else:
         ai_section = "🤖 *AI Analysis*\nNo news available for this security."
 
+    if backtest is not None:
+        strat = backtest["strategy_return"]
+        hold  = backtest["hold_return"]
+        strat_str = f"+{strat}%" if strat >= 0 else f"{strat}%"
+        hold_str  = f"+{hold}%"  if hold  >= 0 else f"{hold}%"
+        verdict = "✅ Strategy beat buy & hold" if strat >= hold else "⚠️ Buy & hold outperformed"
+        backtest_section = (
+            f"\n"
+            f"📈 *2-Year Backtest (this signal strategy)*\n"
+            f"  • Strategy: {strat_str} ({backtest['num_trades']} trades, {backtest['win_rate']}% win rate)\n"
+            f"  • Buy & Hold: {hold_str}\n"
+            f"  • {verdict}"
+        )
+    else:
+        backtest_section = ""
+
     return (
         f"{header_emoji} *{side} SIGNAL* — {name} ({ticker})\n"
         f"📅 Date: {tech['date']}\n"
@@ -824,6 +963,7 @@ def format_hybrid_alert(
         f"Triggered indicators:\n{triggered_lines}\n"
         f"\n"
         f"{ai_section}"
+        f"{backtest_section}"
     )
 
 
@@ -978,6 +1118,7 @@ def _run_once_inner(force: bool = False, notify: bool = True) -> None:
                     ticker=ticker,
                     side=side,
                     tech=tech,
+                    df=df,
                     state=state,
                     notify=notify,
                 )
@@ -998,6 +1139,7 @@ def _process_signal_side(
     ticker: str,
     side: str,
     tech: dict,
+    df: pd.DataFrame,
     state: dict,
     notify: bool = True,
 ) -> Optional[dict]:
@@ -1044,7 +1186,8 @@ def _process_signal_side(
         )
         return None
 
-    message = format_hybrid_alert(name, ticker, tech, llm, side=side)
+    backtest = run_backtest(df)
+    message = format_hybrid_alert(name, ticker, tech, llm, side=side, backtest=backtest)
     log.info("ALERT %s %s\n%s", side, ticker, message)
 
     sent = send_whatsapp(message)
