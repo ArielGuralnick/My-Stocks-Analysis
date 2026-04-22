@@ -124,7 +124,7 @@ TICKER_COLUMN = _cfg_excel.get("ticker_column") or os.getenv("TICKER_COLUMN", "×
 HEADER_ROW = int(_cfg_excel.get("header_row") if _cfg_excel.get("header_row") is not None else os.getenv("HEADER_ROW", "9"))
 CHECK_INTERVAL_SECONDS = 2 * 60 * 60   # 2 hours (continuous mode)
 
-DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 STATE_FILE = DATA_DIR / "signals_state.json"
 SCAN_HISTORY_FILE = DATA_DIR / "scan_history.json"

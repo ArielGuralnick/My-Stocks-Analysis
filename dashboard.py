@@ -60,7 +60,7 @@ from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).resolve().parent
 # On Render the persistent disk is mounted at /app/data; fall back to project root locally.
-DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR)))
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 SCAN_HISTORY_FILE = DATA_DIR / "scan_history.json"
 STATE_FILE = DATA_DIR / "signals_state.json"
