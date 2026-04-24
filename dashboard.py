@@ -554,7 +554,9 @@ def api_ohlcv():
         "macd_hist": macd_hist,
     }
     _ohlcv_cache[cache_key] = {"data": result, "ts": now_ts}
-    return jsonify(result)
+    response = jsonify(result)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
 
 
 @app.route("/api/force_scan", methods=["POST", "OPTIONS"])

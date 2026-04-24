@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garant:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=JetBrains+Mono:wght@300;400;500;700&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 
 <style>
 /* ─── Tokens (inheriting landing page palette) ─── */
@@ -557,6 +558,53 @@ pre.logs {
   .nav__greeting { display: none; }
   .foot__inner { flex-direction: column; text-align: center; }
 }
+
+/* ─── Technical Chart card ─── */
+.chart-head {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.chart-controls select {
+  padding: 0.22rem 0.55rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-hi);
+  color: var(--amber-text);
+  font-family: var(--f-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.chart-controls select:focus { border-color: var(--amber); }
+.chart-panel-label {
+  font-family: var(--f-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 3px 1.25rem 1px;
+}
+#chart-status {
+  font-family: var(--f-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  color: var(--amber-text);
+  padding: 4px 1.25rem;
+  min-height: 1.2rem;
+}
+tr[data-ticker] { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -714,6 +762,33 @@ pre.logs {
     </div>
   </div>
 
+  <!-- Technical Chart -->
+  <div class="card card--full" id="chart-card" style="margin-bottom:1.5rem;">
+    <div class="chart-head">
+      <span class="card__dot"></span>
+      <span class="card__title">Technical Chart</span>
+      <span class="chart-controls">
+        <select id="chart-ticker" aria-label="Select ticker"></select>
+        <select id="chart-period" aria-label="Select period">
+          <option value="1mo">1M</option>
+          <option value="3mo">3M</option>
+          <option value="6mo" selected>6M</option>
+          <option value="1y">1Y</option>
+          <option value="2y">2Y</option>
+        </select>
+      </span>
+    </div>
+    <div class="chart-panel-label">Price · SMA200 · Bollinger Bands</div>
+    <div id="chart-price" style="height:340px;"></div>
+    <div class="chart-panel-label" style="margin-top:2px;">Volume</div>
+    <div id="chart-volume" style="height:80px;"></div>
+    <div class="chart-panel-label" style="margin-top:2px;">RSI 14</div>
+    <div id="chart-rsi" style="height:100px;"></div>
+    <div class="chart-panel-label" style="margin-top:2px;">MACD (12, 26, 9)</div>
+    <div id="chart-macd" style="height:100px;"></div>
+    <div id="chart-status"></div>
+  </div>
+
   <!-- Recent Logs -->
   <div class="card card--full">
     <div class="card__head">
@@ -847,7 +922,7 @@ pre.logs {
           ? '<span class="badge badge-ok">OK</span>'
           : '<span class="badge badge-fail">FAIL</span>';
         var ts = (a.timestamp || '').slice(0, 16).replace('T', ' ');
-        alertHtml += '<tr>'
+        alertHtml += '<tr data-ticker="' + (a.ticker || '') + '" title="Click to chart ' + (a.ticker || '') + '">'
           + '<td>' + ts + '</td>'
           + '<td><strong style="color:var(--amber-text)">' + (a.ticker || '') + '</strong></td>'
           + '<td><span class="badge ' + sideClass + '">' + (a.side || '') + '</span></td>'
@@ -893,6 +968,15 @@ pre.logs {
     /* Logs */
     document.getElementById('logsContent').textContent =
       (data.logs || []).join('\n') || 'No log entries yet.';
+
+    /* Chart — populate ticker dropdown from scan results */
+    if (typeof window._chartSetTickers === 'function') {
+      var tickers = [];
+      if (data.scans && data.scans[0] && data.scans[0].results) {
+        data.scans[0].results.forEach(function(r) { if (r.ticker) tickers.push(r.ticker); });
+      }
+      window._chartSetTickers(tickers.sort());
+    }
   }
 
   /* ── localStorage cache: show last known data instantly, then refresh ── */
@@ -1170,6 +1254,139 @@ pre.logs {
 
   }());
 
+})();
+
+// ── Technical Chart ───────────────────────────────────────────────────────────
+(function() {
+  if (typeof LightweightCharts === 'undefined') return;
+
+  var BACKEND = 'https://portfolio-sentinel-dashboard.onrender.com';
+  var tickerSel = document.getElementById('chart-ticker');
+  var periodSel = document.getElementById('chart-period');
+  var statusEl  = document.getElementById('chart-status');
+
+  var THEME = {
+    layout: { background: { color: '#101019' }, textColor: 'rgba(234,229,219,0.55)' },
+    grid:   { vertLines: { color: 'rgba(210,200,255,0.07)' }, horzLines: { color: 'rgba(210,200,255,0.07)' } },
+    crosshair: { mode: 1 },
+    rightPriceScale: { borderColor: 'rgba(210,200,255,0.07)' },
+    timeScale: { borderColor: 'rgba(210,200,255,0.07)', timeVisible: true, secondsVisible: false },
+  };
+
+  function makeChart(id, h, extra) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    return LightweightCharts.createChart(el, Object.assign({}, THEME, { width: el.clientWidth, height: h }, extra || {}));
+  }
+
+  var priceChart = makeChart('chart-price', 340);
+  var volChart   = makeChart('chart-volume', 80,  { timeScale: { visible: false } });
+  var rsiChart   = makeChart('chart-rsi',    100, { timeScale: { visible: false } });
+  var macdChart  = makeChart('chart-macd',   100, { timeScale: { visible: false } });
+  if (!priceChart) return;
+
+  var sSeries = priceChart.addCandlestickSeries({ upColor: '#34d399', downColor: '#ff3055', borderUpColor: '#34d399', borderDownColor: '#ff3055', wickUpColor: '#34d399', wickDownColor: '#ff3055' });
+  var sSma    = priceChart.addLineSeries({ color: '#c0801e', lineWidth: 1.5, title: 'SMA200', priceLineVisible: false, lastValueVisible: false });
+  var sBbUp   = priceChart.addLineSeries({ color: '#00d9b8', lineWidth: 1, lineStyle: 1, title: 'BB↑', priceLineVisible: false, lastValueVisible: false });
+  var sBbMid  = priceChart.addLineSeries({ color: '#00d9b8', lineWidth: 1, lineStyle: 2, title: 'BB mid', priceLineVisible: false, lastValueVisible: false });
+  var sBbLo   = priceChart.addLineSeries({ color: '#00d9b8', lineWidth: 1, lineStyle: 1, title: 'BB↓', priceLineVisible: false, lastValueVisible: false });
+
+  var sVol = volChart ? volChart.addHistogramSeries({ color: '#34d399', priceFormat: { type: 'volume' }, priceScaleId: 'vol' }) : null;
+  if (volChart && sVol) volChart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.1, bottom: 0 } });
+
+  var sRsi = rsiChart ? rsiChart.addLineSeries({ color: '#a78bfa', lineWidth: 2, title: 'RSI', priceLineVisible: false, lastValueVisible: true }) : null;
+  if (sRsi) {
+    sRsi.createPriceLine({ price: 70, color: '#ff3055', lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: 'OB' });
+    sRsi.createPriceLine({ price: 30, color: '#34d399', lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: 'OS' });
+  }
+
+  var sMacd   = macdChart ? macdChart.addLineSeries({ color: '#00d9b8', lineWidth: 1.5, title: 'MACD', priceLineVisible: false, lastValueVisible: false }) : null;
+  var sSignal = macdChart ? macdChart.addLineSeries({ color: '#c0801e', lineWidth: 1.5, title: 'Signal', priceLineVisible: false, lastValueVisible: false }) : null;
+  var sHist   = macdChart ? macdChart.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false }) : null;
+
+  var charts = [priceChart, volChart, rsiChart, macdChart].filter(Boolean);
+  var syncing = false;
+  charts.forEach(function(c) {
+    c.timeScale().subscribeVisibleLogicalRangeChange(function() {
+      if (syncing) return;
+      syncing = true;
+      var r = c.timeScale().getVisibleLogicalRange();
+      if (r) charts.forEach(function(o) { if (o !== c) o.timeScale().setVisibleLogicalRange(r); });
+      syncing = false;
+    });
+  });
+
+  window.addEventListener('resize', function() {
+    var el = document.getElementById('chart-price');
+    if (!el) return;
+    var w = el.clientWidth;
+    [340, 80, 100, 100].forEach(function(h, i) { if (charts[i]) charts[i].resize(w, h); });
+  });
+
+  function noNull(arr) {
+    return arr.filter(function(d) { return d.value !== null && d.value !== undefined; });
+  }
+
+  function loadChart(ticker, period) {
+    if (!ticker) return;
+    if (statusEl) statusEl.textContent = 'Loading ' + ticker + '…';
+    fetch(BACKEND + '/api/ohlcv?ticker=' + encodeURIComponent(ticker) + '&period=' + encodeURIComponent(period))
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.ok) { if (statusEl) statusEl.textContent = 'Error: ' + (d.error || 'failed'); return; }
+        sSeries.setData(d.candles.filter(function(c) { return c.open !== null; }));
+        sSma.setData(noNull(d.sma200));
+        sBbUp.setData(noNull(d.bb_upper));
+        sBbMid.setData(noNull(d.bb_mid));
+        sBbLo.setData(noNull(d.bb_lower));
+        if (sVol) sVol.setData(d.candles.filter(function(c) { return c.volume > 0; }).map(function(c) {
+          return { time: c.time, value: c.volume, color: c.close >= c.open ? '#34d39960' : '#ff305560' };
+        }));
+        if (sRsi) sRsi.setData(noNull(d.rsi14));
+        if (sMacd) sMacd.setData(noNull(d.macd));
+        if (sSignal) sSignal.setData(noNull(d.macd_signal));
+        if (sHist) sHist.setData(noNull(d.macd_hist).map(function(h) {
+          return { time: h.time, value: h.value, color: h.value >= 0 ? '#34d39980' : '#ff305580' };
+        }));
+        syncing = true;
+        charts.forEach(function(c) { c.timeScale().fitContent(); });
+        syncing = false;
+        if (statusEl) statusEl.textContent = '';
+      })
+      .catch(function() { if (statusEl) statusEl.textContent = 'Network error loading chart.'; });
+  }
+
+  window._chartSetTickers = function(tickers) {
+    var current = tickerSel.value;
+    tickerSel.innerHTML = '';
+    tickers.forEach(function(t) {
+      var opt = document.createElement('option');
+      opt.value = t; opt.textContent = t;
+      if (t === current) opt.selected = true;
+      tickerSel.appendChild(opt);
+    });
+    if (!current && tickers.length) loadChart(tickers[0], periodSel.value);
+  };
+
+  tickerSel.addEventListener('change', function() { loadChart(tickerSel.value, periodSel.value); });
+  periodSel.addEventListener('change', function() { loadChart(tickerSel.value, periodSel.value); });
+
+  document.addEventListener('click', function(e) {
+    var row = e.target.closest('tr[data-ticker]');
+    if (!row) return;
+    var t = row.dataset.ticker;
+    if (!t) return;
+    var found = false;
+    for (var i = 0; i < tickerSel.options.length; i++) {
+      if (tickerSel.options[i].value === t) { tickerSel.selectedIndex = i; found = true; break; }
+    }
+    if (!found) {
+      var opt = document.createElement('option');
+      opt.value = t; opt.textContent = t; tickerSel.appendChild(opt); tickerSel.value = t;
+    }
+    document.getElementById('chart-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    loadChart(t, periodSel.value);
+  });
 })();
 </script>
 </body>
