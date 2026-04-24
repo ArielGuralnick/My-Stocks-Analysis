@@ -10,6 +10,13 @@
       ],
       "port": 8080,
       "autoPort": true
+    },
+    {
+      "name": "Dashboard",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["dashboard.py"],
+      "port": 5050,
+      "autoPort": true
     }
   ]
 }

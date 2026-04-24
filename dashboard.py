@@ -81,6 +81,10 @@ _GH_PATH   = "data/scan_history.json"
 _GH_API    = f"https://api.github.com/repos/{_GH_REPO}/contents/{_GH_PATH}"
 _log       = logging.getLogger("dashboard")
 
+# In-memory OHLCV cache keyed by (ticker, period); entries expire after 5 minutes
+_ohlcv_cache: dict = {}
+_OHLCV_TTL = 300  # seconds
+
 
 def _github_pull() -> bool:
     """Download scan_history.json from GitHub into the local DATA_DIR.
@@ -357,6 +361,36 @@ def _attach_display_times(scans: list) -> None:
             alert["display_time"] = _fmt_jerusalem(alert.get("timestamp", ""), with_tz=False)
 
 
+def _get_chart_tickers() -> list[str]:
+    """Resolve the set of tickers available for charting.
+
+    Priority: TICKERS env var > config.yaml ticker_map values > last scan results.
+    Returns a sorted, deduplicated list of uppercase ticker symbols.
+    """
+    tickers: set[str] = set()
+
+    env_tickers = os.getenv("TICKERS", "")
+    if env_tickers:
+        for t in env_tickers.split(","):
+            t = t.strip().upper()
+            if t:
+                tickers.add(t)
+
+    cfg = _load_config()
+    for t in (cfg.get("ticker_map") or {}).values():
+        if isinstance(t, str) and t.strip():
+            tickers.add(t.strip().upper())
+
+    scans = _load_json(SCAN_HISTORY_FILE, [])
+    if scans and isinstance(scans, list):
+        for result in (scans[0].get("results") or []):
+            t = result.get("ticker", "")
+            if t:
+                tickers.add(t.strip().upper())
+
+    return sorted(tickers)
+
+
 @app.route("/")
 def index():
     scans = _load_json(SCAN_HISTORY_FILE, [])
@@ -377,6 +411,7 @@ def index():
         all_alerts=all_alerts[:30],
         logs=logs,
         now=_now_jerusalem_str(),
+        chart_tickers=_get_chart_tickers(),
     )
 
 
@@ -425,6 +460,101 @@ def api_quotes():
     })
     response.headers["Access-Control-Allow-Origin"] = "*"
     return response
+
+
+@app.route("/api/ohlcv")
+def api_ohlcv():
+    """Return OHLCV + technical indicator data for charting.
+
+    Usage:  /api/ohlcv?ticker=NVDA&period=6mo
+    Accepted periods: 1mo, 3mo, 6mo, 1y, 2y  (default: 6mo)
+    """
+    import time as _time
+
+    VALID_PERIODS = {"1mo", "3mo", "6mo", "1y", "2y"}
+    ticker = request.args.get("ticker", "").strip().upper()
+    period = request.args.get("period", "6mo").strip().lower()
+
+    if not ticker:
+        return jsonify({"ok": False, "error": "No ticker provided"}), 400
+    if period not in VALID_PERIODS:
+        return jsonify({"ok": False, "error": f"Invalid period. Use: {', '.join(sorted(VALID_PERIODS))}"}), 400
+
+    allowed = set(_get_chart_tickers())
+    if allowed and ticker not in allowed:
+        return jsonify({"ok": False, "error": f"Ticker {ticker!r} not in portfolio"}), 400
+
+    cache_key = (ticker, period)
+    now_ts = _time.time()
+    if cache_key in _ohlcv_cache:
+        entry = _ohlcv_cache[cache_key]
+        if now_ts - entry["ts"] < _OHLCV_TTL:
+            return jsonify(entry["data"])
+
+    try:
+        import yfinance as yf
+        from portfolio_monitor import compute_indicators
+    except ImportError as exc:
+        return jsonify({"ok": False, "error": f"Dependency missing: {exc}"}), 500
+
+    try:
+        df = yf.download(ticker, period=period, interval="1d", auto_adjust=True, progress=False)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Download failed: {str(exc)[:200]}"}), 502
+
+    if df is None or df.empty:
+        return jsonify({"ok": False, "error": f"No data for {ticker} ({period})"}), 404
+
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    df = compute_indicators(df)
+
+    def _v(val):
+        try:
+            f = float(val)
+            return None if (math.isnan(f) or math.isinf(f)) else round(f, 4)
+        except Exception:
+            return None
+
+    candles, sma200, bb_upper, bb_mid, bb_lower = [], [], [], [], []
+    rsi14, macd_line, macd_signal, macd_hist = [], [], [], []
+
+    for date, row in df.iterrows():
+        t = str(date)[:10]
+        candles.append({
+            "time": t,
+            "open":  _v(row.get("Open")),
+            "high":  _v(row.get("High")),
+            "low":   _v(row.get("Low")),
+            "close": _v(row.get("Close")),
+            "volume": int(row.get("Volume", 0) or 0),
+        })
+        sma200.append({"time": t, "value": _v(row.get("SMA_200"))})
+        bb_upper.append({"time": t, "value": _v(row.get("BB_UPPER"))})
+        bb_mid.append({"time": t, "value": _v(row.get("BB_MID"))})
+        bb_lower.append({"time": t, "value": _v(row.get("BB_LOWER"))})
+        rsi14.append({"time": t, "value": _v(row.get("RSI_14"))})
+        macd_line.append({"time": t, "value": _v(row.get("MACD"))})
+        macd_signal.append({"time": t, "value": _v(row.get("MACD_SIGNAL"))})
+        macd_hist.append({"time": t, "value": _v(row.get("MACD_HIST"))})
+
+    result = {
+        "ok": True,
+        "ticker": ticker,
+        "period": period,
+        "candles": candles,
+        "sma200": sma200,
+        "bb_upper": bb_upper,
+        "bb_mid": bb_mid,
+        "bb_lower": bb_lower,
+        "rsi14": rsi14,
+        "macd": macd_line,
+        "macd_signal": macd_signal,
+        "macd_hist": macd_hist,
+    }
+    _ohlcv_cache[cache_key] = {"data": result, "ts": now_ts}
+    return jsonify(result)
 
 
 @app.route("/api/force_scan", methods=["POST", "OPTIONS"])
@@ -594,6 +724,7 @@ DASHBOARD_HTML = r"""
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Portfolio Monitor Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 :root {
     --bg: #0f1117;
@@ -933,6 +1064,49 @@ pre.logs {
     margin-bottom: 0.5rem;
     font-style: italic;
 }
+
+/* ── Technical Chart card ── */
+#chart-card .card-title {
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+.chart-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+.chart-controls select {
+    padding: 0.25rem 0.5rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-size: 0.78rem;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+}
+.chart-controls select:focus { border-color: var(--accent); }
+.chart-panel {
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 2px;
+}
+.chart-panel-label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 0 1px;
+}
+#chart-status {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    min-height: 1.2rem;
+    padding-top: 4px;
+}
+tr[data-ticker] { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -1133,7 +1307,7 @@ pre.logs {
     <thead><tr><th>Time</th><th>Ticker</th><th>Side</th><th>Score</th><th>Indicators</th><th>AI</th><th>Sent</th></tr></thead>
     <tbody>
     {% for a in all_alerts %}
-    <tr>
+    <tr data-ticker="{{ a.ticker }}" title="Click to chart {{ a.ticker }}">
         <td>{{ a.display_time or a.timestamp[:16].replace('T', ' ') }}</td>
         <td><strong>{{ a.ticker }}</strong></td>
         <td><span class="badge {% if a.side == 'BUY' %}badge-buy{% else %}badge-sell{% endif %}">{{ a.side }}</span></td>
@@ -1162,6 +1336,36 @@ pre.logs {
     {% else %}
     <div class="empty">No alerts sent yet.</div>
     {% endif %}
+</div>
+
+<!-- TECHNICAL CHART -->
+<div class="card card-full" id="chart-card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+        Technical Chart
+        <span class="chart-controls">
+            <select id="chart-ticker" aria-label="Select ticker">
+                {% for t in chart_tickers %}
+                <option value="{{ t }}">{{ t }}</option>
+                {% endfor %}
+            </select>
+            <select id="chart-period" aria-label="Select period">
+                <option value="1mo">1M</option>
+                <option value="3mo">3M</option>
+                <option value="6mo" selected>6M</option>
+                <option value="1y">1Y</option>
+                <option value="2y">2Y</option>
+            </select>
+        </span>
+    </div>
+    <div class="chart-panel-label">Price · SMA200 · Bollinger Bands</div>
+    <div class="chart-panel" id="chart-price" style="height:340px;"></div>
+    <div class="chart-panel-label" style="margin-top:6px;">Volume</div>
+    <div class="chart-panel" id="chart-volume" style="height:80px;"></div>
+    <div class="chart-panel-label" style="margin-top:6px;">RSI 14</div>
+    <div class="chart-panel" id="chart-rsi" style="height:100px;"></div>
+    <div class="chart-panel-label" style="margin-top:6px;">MACD (12, 26, 9)</div>
+    <div class="chart-panel" id="chart-macd" style="height:100px;"></div>
+    <div id="chart-status"></div>
 </div>
 
 <!-- RECENT LOGS -->
@@ -1479,6 +1683,160 @@ pre.logs {
       mappingSubmit.click();
     }
   });
+})();
+
+// ── Technical Chart (lightweight-charts v4) ──────────────────────────────────
+(function() {
+  if (typeof LightweightCharts === 'undefined') return;
+
+  window.CHART_TICKERS = {{ chart_tickers | tojson }};
+
+  var tickerSel = document.getElementById('chart-ticker');
+  var periodSel = document.getElementById('chart-period');
+  var statusEl  = document.getElementById('chart-status');
+
+  if (!tickerSel || !periodSel) return;
+
+  var DARK = {
+    layout: { background: { color: '#1a1d27' }, textColor: '#8b8fa3' },
+    grid:   { vertLines: { color: '#2d3348' }, horzLines: { color: '#2d3348' } },
+    crosshair: { mode: 1 },
+    rightPriceScale: { borderColor: '#2d3348' },
+    timeScale: { borderColor: '#2d3348', timeVisible: true, secondsVisible: false },
+  };
+
+  function makeChart(id, height, extra) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    return LightweightCharts.createChart(el, Object.assign({}, DARK, { width: el.clientWidth, height: height }, extra || {}));
+  }
+
+  var priceChart  = makeChart('chart-price',  340);
+  var volChart    = makeChart('chart-volume', 80,  { timeScale: { visible: false } });
+  var rsiChart    = makeChart('chart-rsi',    100, { timeScale: { visible: false } });
+  var macdChart   = makeChart('chart-macd',   100, { timeScale: { visible: false } });
+
+  if (!priceChart) return;
+
+  // Price series
+  var sSeries  = priceChart.addCandlestickSeries({ upColor: '#34d399', downColor: '#f87171', borderUpColor: '#34d399', borderDownColor: '#f87171', wickUpColor: '#34d399', wickDownColor: '#f87171' });
+  var sSma     = priceChart.addLineSeries({ color: '#fbbf24', lineWidth: 1.5, title: 'SMA200', priceLineVisible: false, lastValueVisible: false });
+  var sBbUp    = priceChart.addLineSeries({ color: '#6c8cff', lineWidth: 1, lineStyle: 1, title: 'BB↑', priceLineVisible: false, lastValueVisible: false });
+  var sBbMid   = priceChart.addLineSeries({ color: '#6c8cff', lineWidth: 1, lineStyle: 2, title: 'BB mid', priceLineVisible: false, lastValueVisible: false });
+  var sBbLo    = priceChart.addLineSeries({ color: '#6c8cff', lineWidth: 1, lineStyle: 1, title: 'BB↓', priceLineVisible: false, lastValueVisible: false });
+
+  // Volume series
+  var sVol = volChart ? volChart.addHistogramSeries({ color: '#34d399', priceFormat: { type: 'volume' }, priceScaleId: 'vol' }) : null;
+  if (volChart && sVol) volChart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.1, bottom: 0 } });
+
+  // RSI series
+  var sRsi = rsiChart ? rsiChart.addLineSeries({
+    color: '#a78bfa', lineWidth: 2, title: 'RSI',
+    priceLineVisible: false, lastValueVisible: true,
+  }) : null;
+  if (sRsi) {
+    sRsi.createPriceLine({ price: 70, color: '#f87171', lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: 'OB' });
+    sRsi.createPriceLine({ price: 30, color: '#34d399', lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: 'OS' });
+  }
+
+  // MACD series
+  var sMacd   = macdChart ? macdChart.addLineSeries({ color: '#6c8cff', lineWidth: 1.5, title: 'MACD', priceLineVisible: false, lastValueVisible: false }) : null;
+  var sSignal = macdChart ? macdChart.addLineSeries({ color: '#fb923c', lineWidth: 1.5, title: 'Signal', priceLineVisible: false, lastValueVisible: false }) : null;
+  var sHist   = macdChart ? macdChart.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false }) : null;
+
+  // Sync time scales
+  var charts = [priceChart, volChart, rsiChart, macdChart].filter(Boolean);
+  var syncing = false;
+  charts.forEach(function(c) {
+    c.timeScale().subscribeVisibleLogicalRangeChange(function() {
+      if (syncing) return;
+      syncing = true;
+      var r = c.timeScale().getVisibleLogicalRange();
+      if (r) charts.forEach(function(o) { if (o !== c) o.timeScale().setVisibleLogicalRange(r); });
+      syncing = false;
+    });
+  });
+
+  // Responsive resize
+  function resize() {
+    var priceEl = document.getElementById('chart-price');
+    if (!priceEl) return;
+    var w = priceEl.clientWidth;
+    var heights = [340, 80, 100, 100];
+    charts.forEach(function(c, i) { c.resize(w, heights[i] || 100); });
+  }
+  window.addEventListener('resize', resize);
+
+  // Filter nulls from series arrays
+  function noNull(arr) {
+    return arr.filter(function(d) { return d.value !== null && d.value !== undefined; });
+  }
+
+  // Load chart data from API
+  function loadChart(ticker, period) {
+    if (!ticker) return;
+    if (statusEl) statusEl.textContent = 'Loading ' + ticker + '…';
+    fetch('/api/ohlcv?ticker=' + encodeURIComponent(ticker) + '&period=' + encodeURIComponent(period))
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.ok) {
+          if (statusEl) statusEl.textContent = 'Error: ' + (d.error || 'Unknown error');
+          return;
+        }
+        sSeries.setData(d.candles.filter(function(c) { return c.open !== null; }));
+        sSma.setData(noNull(d.sma200));
+        sBbUp.setData(noNull(d.bb_upper));
+        sBbMid.setData(noNull(d.bb_mid));
+        sBbLo.setData(noNull(d.bb_lower));
+
+        if (sVol) {
+          sVol.setData(d.candles.filter(function(c) { return c.volume > 0; }).map(function(c) {
+            return { time: c.time, value: c.volume, color: c.close >= c.open ? '#34d39960' : '#f8717160' };
+          }));
+        }
+        if (sRsi) sRsi.setData(noNull(d.rsi14));
+        if (sMacd) sMacd.setData(noNull(d.macd));
+        if (sSignal) sSignal.setData(noNull(d.macd_signal));
+        if (sHist) {
+          sHist.setData(noNull(d.macd_hist).map(function(h) {
+            return { time: h.time, value: h.value, color: h.value >= 0 ? '#34d39980' : '#f8717180' };
+          }));
+        }
+        syncing = true;
+        charts.forEach(function(c) { c.timeScale().fitContent(); });
+        syncing = false;
+        if (statusEl) statusEl.textContent = '';
+      })
+      .catch(function() {
+        if (statusEl) statusEl.textContent = 'Network error — could not load chart data.';
+      });
+  }
+
+  tickerSel.addEventListener('change', function() { loadChart(tickerSel.value, periodSel.value); });
+  periodSel.addEventListener('change', function() { loadChart(tickerSel.value, periodSel.value); });
+
+  // Click on alert rows jumps to chart
+  document.querySelectorAll('tr[data-ticker]').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var t = row.dataset.ticker;
+      if (!t) return;
+      var found = false;
+      for (var i = 0; i < tickerSel.options.length; i++) {
+        if (tickerSel.options[i].value === t) { tickerSel.selectedIndex = i; found = true; break; }
+      }
+      if (!found) {
+        var opt = document.createElement('option');
+        opt.value = t; opt.textContent = t;
+        tickerSel.appendChild(opt);
+        tickerSel.value = t;
+      }
+      document.getElementById('chart-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      loadChart(t, periodSel.value);
+    });
+  });
+
+  // Initial load
+  if (tickerSel.value) loadChart(tickerSel.value, periodSel.value);
 })();
 </script>
 </body>
