@@ -140,6 +140,16 @@ def _github_push() -> None:
 app = Flask(__name__)
 
 
+@app.after_request
+def _add_cors(response):
+    """Add CORS headers to every /api/* response so Netlify can call Render."""
+    if request.path.startswith("/api/"):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
 def _allowed_file(filename: str) -> bool:
     return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
 
@@ -554,9 +564,7 @@ def api_ohlcv():
         "macd_hist": macd_hist,
     }
     _ohlcv_cache[cache_key] = {"data": result, "ts": now_ts}
-    response = jsonify(result)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    return response
+    return jsonify(result)
 
 
 @app.route("/api/force_scan", methods=["POST", "OPTIONS"])
