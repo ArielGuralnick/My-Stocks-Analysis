@@ -1279,15 +1279,15 @@ tr[data-ticker] { cursor: pointer; }
     <tr>
         <td><strong>{{ r.ticker }}</strong></td>
         <td>{{ r.name }}</td>
-        <td>${{ "%.2f" | format(r.close) }}</td>
+        <td>${{ "%.2f" | format(r.close or 0) }}</td>
         <td>
-            <span {% if r.rsi < 35 %}style="color:var(--green)"{% elif r.rsi > 70 %}style="color:var(--red)"{% endif %}>
-                {{ "%.1f" | format(r.rsi) }}
+            <span {% if (r.rsi or 0) < 35 %}style="color:var(--green)"{% elif (r.rsi or 0) > 70 %}style="color:var(--red)"{% endif %}>
+                {{ "%.1f" | format(r.rsi or 0) }}
             </span>
         </td>
         <td>
-            <span {% if r.sma200_delta_pct > 0 %}style="color:var(--green)"{% else %}style="color:var(--red)"{% endif %}>
-                {{ "%+.1f" | format(r.sma200_delta_pct) }}%
+            <span {% if (r.sma200_delta_pct or 0) > 0 %}style="color:var(--green)"{% else %}style="color:var(--red)"{% endif %}>
+                {{ "%+.1f" | format(r.sma200_delta_pct or 0) }}%
             </span>
         </td>
         <td>
