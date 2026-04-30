@@ -10,4 +10,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping /api/quotes
-        run: curl -fsS --max-time 60 "https://portfolio-sentinel-dashboard.onrender.com/api/quotes?symbols=NVDA"
+        run: curl -fsS --max-time 90 --retry 2 "https://portfolio-sentinel-dashboard.onrender.com/api/quotes?symbols=NVDA"
