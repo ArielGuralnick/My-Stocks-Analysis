@@ -1866,6 +1866,7 @@ def _start_scheduler() -> None:
     scheduler = BackgroundScheduler(timezone="America/New_York")
 
     def _scan_and_push():
+        _github_pull()
         run_once()
         _github_push()
 
@@ -1886,9 +1887,9 @@ def _start_scheduler() -> None:
     from datetime import datetime as _dt, timedelta as _td
 
     def _startup_scan_if_stale():
-        # Pull latest scan history from GitHub first (survives Render free-tier restarts)
-        if not SCAN_HISTORY_FILE.exists() or SCAN_HISTORY_FILE.stat().st_size < 10:
-            _github_pull()
+        # Always pull latest scan history from GitHub first — ensures cooldowns and history
+        # are current even when the disk has stale data from a previous session.
+        _github_pull()
         history = _load_json(SCAN_HISTORY_FILE, [])
         if history:
             try:
