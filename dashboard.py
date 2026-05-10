@@ -16,6 +16,7 @@ import logging
 import math
 import os
 import re
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -138,16 +139,20 @@ def _github_push() -> None:
 
 
 app = Flask(__name__)
+_scan_lock = threading.Lock()
 
 
 @app.after_request
 def _add_cors(response):
-    """Add CORS headers to every /api/* response so Netlify can call Render."""
-    if request.path.startswith("/api/"):
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
+
+
+@app.route("/<path:path>", methods=["OPTIONS"])
+def _options_handler(path):
+    return "", 204
 
 
 def _allowed_file(filename: str) -> bool:
@@ -2507,9 +2512,15 @@ def _start_scheduler() -> None:
     scheduler = BackgroundScheduler(timezone="America/New_York")
 
     def _scan_and_push():
-        _github_pull()
-        run_once()
-        _github_push()
+        if not _scan_lock.acquire(blocking=False):
+            logging.getLogger("dashboard").info("Scan already running — skipping.")
+            return
+        try:
+            _github_pull()
+            run_once()
+            _github_push()
+        finally:
+            _scan_lock.release()
 
     # Run every 2 hours Mon–Fri 09:30–16:00 ET. run_once() self-filters if market is closed.
     scheduler.add_job(
@@ -2522,35 +2533,41 @@ def _start_scheduler() -> None:
 
     # One-shot startup scan: runs ~5s after the service comes up so the dashboard
     # has fresh data on first load (Render spins down free services when idle).
-    # Only fires if no scan has run in the last 25 minutes — prevents duplicate
+    # Only fires if no scan has run in the last 90 minutes — prevents duplicate
     # alerts when Render restarts the service on wake-up.
     # force=True so it still populates outside market hours.
     from datetime import datetime as _dt, timedelta as _td
 
     def _startup_scan_if_stale():
-        # Always pull latest scan history from GitHub first — ensures cooldowns and history
-        # are current even when the disk has stale data from a previous session.
-        _github_pull()
-        history = _load_json(SCAN_HISTORY_FILE, [])
-        if history:
-            try:
-                from datetime import timezone as _tz
-                last_ts = _dt.fromisoformat(history[0]["timestamp"])
-                if last_ts.tzinfo is None:
-                    last_ts = last_ts.replace(tzinfo=_tz.utc)
-                age_minutes = (_dt.now(tz=_tz.utc) - last_ts).total_seconds() / 60
-                if age_minutes < 25:
-                    logging.getLogger("dashboard").info(
-                        "Startup scan skipped — last scan was %.1f min ago.", age_minutes
-                    )
-                    return
-            except Exception:
-                pass
-        # notify=False: populate dashboard data without re-sending WhatsApp alerts.
-        # This prevents duplicate alerts when Render restarts the service and the
-        # cooldown state file (signals_state.json) has been lost on the ephemeral FS.
-        run_once(force=True, notify=False)
-        _github_push()
+        if not _scan_lock.acquire(blocking=False):
+            logging.getLogger("dashboard").info("Startup scan skipped — scan already running.")
+            return
+        try:
+            # Always pull latest scan history from GitHub first — ensures cooldowns and history
+            # are current even when the disk has stale data from a previous session.
+            _github_pull()
+            history = _load_json(SCAN_HISTORY_FILE, [])
+            if history:
+                try:
+                    from datetime import timezone as _tz
+                    last_ts = _dt.fromisoformat(history[0]["timestamp"])
+                    if last_ts.tzinfo is None:
+                        last_ts = last_ts.replace(tzinfo=_tz.utc)
+                    age_minutes = (_dt.now(tz=_tz.utc) - last_ts).total_seconds() / 60
+                    if age_minutes < 90:
+                        logging.getLogger("dashboard").info(
+                            "Startup scan skipped — last scan was %.1f min ago.", age_minutes
+                        )
+                        return
+                except Exception:
+                    pass
+            # notify=False: populate dashboard data without re-sending WhatsApp alerts.
+            # This prevents duplicate alerts when Render restarts the service and the
+            # cooldown state file (signals_state.json) has been lost on the ephemeral FS.
+            run_once(force=True, notify=False)
+            _github_push()
+        finally:
+            _scan_lock.release()
 
     scheduler.add_job(
         _startup_scan_if_stale,
