@@ -123,7 +123,7 @@ def _github_push() -> None:
         r = _req.get(_GH_API, headers=headers, params={"ref": _GH_BRANCH}, timeout=10)
         sha = r.json().get("sha") if r.status_code == 200 else None
         payload: dict = {
-            "message": f"chore: scan history {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            "message": f"chore: scan history {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} [skip render]",
             "content": encoded,
             "branch": _GH_BRANCH,
         }
