@@ -1,5 +1,163 @@
 [
   {
+    "timestamp": "2026-05-12T13:27:53.605859+00:00",
+    "market_status": "pre-market (ET 09:27)",
+    "forced": false,
+    "tickers_count": 14,
+    "results": [
+      {
+        "name": "AMZN",
+        "ticker": "AMZN",
+        "close": 268.989990234375,
+        "rsi": 68.8,
+        "sma200_delta_pct": 17.61,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "BITB",
+        "ticker": "BITB",
+        "close": 44.5099983215332,
+        "rsi": 66.47,
+        "sma200_delta_pct": -11.78,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "CNDX.L",
+        "ticker": "CNDX.L",
+        "close": 1672.199951171875,
+        "rsi": 83.41,
+        "sma200_delta_pct": 17.15,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "CSPX.L",
+        "ticker": "CSPX.L",
+        "close": 795.02001953125,
+        "rsi": 79.59,
+        "sma200_delta_pct": 9.93,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "EIMI.L",
+        "ticker": "EIMI.L",
+        "close": 54.15999984741211,
+        "rsi": 64.91,
+        "sma200_delta_pct": 18.47,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "IMEU.L",
+        "ticker": "IMEU.L",
+        "close": 3309.0,
+        "rsi": 51.33,
+        "sma200_delta_pct": 4.71,
+        "buy_score": 1,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "IREN",
+        "ticker": "IREN",
+        "close": 55.150001525878906,
+        "rsi": 58.07,
+        "sma200_delta_pct": 28.03,
+        "buy_score": 2,
+        "sell_score": 0,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "META",
+        "ticker": "META",
+        "close": 598.8599853515625,
+        "rsi": 39.17,
+        "sma200_delta_pct": -11.2,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "MSFT",
+        "ticker": "MSFT",
+        "close": 412.6600036621094,
+        "rsi": 52.23,
+        "sma200_delta_pct": -11.04,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "MSTR",
+        "ticker": "MSTR",
+        "close": 195.94000244140625,
+        "rsi": 69.69,
+        "sma200_delta_pct": -11.89,
+        "buy_score": 0,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "NVDA",
+        "ticker": "NVDA",
+        "close": 219.44000244140625,
+        "rsi": 68.47,
+        "sma200_delta_pct": 18.65,
+        "buy_score": 2,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "ORCL",
+        "ticker": "ORCL",
+        "close": 193.83999633789062,
+        "rsi": 67.22,
+        "sma200_delta_pct": -7.51,
+        "buy_score": 1,
+        "sell_score": 1,
+        "buy_passes": false,
+        "sell_passes": false
+      },
+      {
+        "name": "TSLA",
+        "ticker": "TSLA",
+        "close": 445.0,
+        "rsi": 74.06,
+        "sma200_delta_pct": 9.85,
+        "buy_score": 1,
+        "sell_score": 2,
+        "buy_passes": false,
+        "sell_passes": false
+      }
+    ],
+    "alerts_sent": [],
+    "errors": [
+      {
+        "ticker": "AAPL",
+        "error": "No data from yfinance"
+      }
+    ]
+  },
+  {
     "timestamp": "2026-05-12T09:25:48.887395+00:00",
     "market_status": "pre-market (ET 05:25)",
     "forced": false,
