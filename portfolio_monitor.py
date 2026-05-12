@@ -145,20 +145,19 @@ TECHNICAL_SCORE_THRESHOLD = 3          # ≥ 3 of 4 indicators must fire
 # Portfolio names (as they appear in the Excel) → Yahoo Finance tickers.
 # Loaded from config.yaml; falls back to hardcoded defaults if not set.
 _DEFAULT_TICKER_MAP: dict[str, str] = {
-    "AMAZON COM INC": "AMZN",
     "APPLE COMPUTER": "AAPL",
     "BITB": "BITB",
-    "IREN LTD": "IREN",
     "META PLATFORMS INC": "META",
     "MICROSOFT CORP": "MSFT",
     "MICROSTRATEGY INC": "MSTR",
     "NVIDIA CORP": "NVDA",
-    "ORACLE CORPORATION": "ORCL",
+    "SOFI TECHNOLOGIES INC.": "SOFI",
     "TESLA MOTORS INC": "TSLA",
-    "(ISHARES CORE MSCI EUROPE UCITS ETF EUR (ACC": "IMEU.L",
-    "ISHARES CORE MSCI EM IMI UCITS ETF": "EIMI.L",
-    "ISHARES CORE S&P 500 UCITS ETF": "CSPX.L",
-    "ISHARES NASDAQ 100 UCITS ETF": "CNDX.L",
+    "iShares CORE MSCI EUROPE UCITS ETF EUR-TA": "IMEU.L",
+    "iShares CORE MSCI EM IMI UCITS ETF-TA": "EIMI.L",
+    "iShares $ CORE S&P 500 UCITS ETF-TA": "CSPX.L",
+    "iShares $ NASDAQ 100 UCITS ETF-TA": "CNDX.L",
+    "אל על": "ELAL.TA",
 }
 TICKER_MAP: dict[str, str] = _cfg.get("ticker_map") or _DEFAULT_TICKER_MAP
 

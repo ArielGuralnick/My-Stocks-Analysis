@@ -382,28 +382,20 @@ def _get_chart_tickers() -> list[str]:
     Priority: TICKERS env var > config.yaml ticker_map values > last scan results.
     Returns a sorted, deduplicated list of uppercase ticker symbols.
     """
-    tickers: set[str] = set()
-
     env_tickers = os.getenv("TICKERS", "")
     if env_tickers:
-        for t in env_tickers.split(","):
-            t = t.strip().upper()
-            if t:
-                tickers.add(t)
+        return sorted({t.strip().upper() for t in env_tickers.split(",") if t.strip()})
 
     cfg = _load_config()
-    for t in (cfg.get("ticker_map") or {}).values():
-        if isinstance(t, str) and t.strip():
-            tickers.add(t.strip().upper())
+    cfg_tickers = {t.strip().upper() for t in (cfg.get("ticker_map") or {}).values() if isinstance(t, str) and t.strip()}
+    if cfg_tickers:
+        return sorted(cfg_tickers)
 
     scans = _load_json(SCAN_HISTORY_FILE, [])
     if scans and isinstance(scans, list):
-        for result in (scans[0].get("results") or []):
-            t = result.get("ticker", "")
-            if t:
-                tickers.add(t.strip().upper())
+        return sorted({r.get("ticker", "").strip().upper() for r in (scans[0].get("results") or []) if r.get("ticker")})
 
-    return sorted(tickers)
+    return []
 
 
 @app.route("/")
