@@ -14,7 +14,7 @@ excel:
   # Full path to your Excel file exported from Excellence brokerage.
   # Leave empty ("") to auto-detect the latest Excellence_*.xlsx in ~/Downloads.
   # You can also upload the file directly from the Dashboard (Upload Excel button).
-  file: "C:/Users/ArielGuralnick/Downloads/Excellence_040426.xlsx"
+  file: "C:/Users/ArielGuralnick/Downloads/נתוני חשבון.xlsx"
 
   # Name of the column in the Excel that contains security names.
   ticker_column: "שם נייר"
@@ -34,17 +34,19 @@ excel:
 #   3. Add a line below:  "EXACT NAME FROM EXCEL": "TICKER"
 # ------------------------------------------------------------
 ticker_map:
-  "AMAZON COM INC": "AMZN"
   "APPLE COMPUTER": "AAPL"
   "BITB": "BITB"
-  "IREN LTD": "IREN"
   "META PLATFORMS INC": "META"
   "MICROSOFT CORP": "MSFT"
   "MICROSTRATEGY INC": "MSTR"
   "NVIDIA CORP": "NVDA"
-  "ORACLE CORPORATION": "ORCL"
+  "SOFI TECHNOLOGIES INC.": "SOFI"
   "TESLA MOTORS INC": "TSLA"
-  "(ISHARES CORE MSCI EUROPE UCITS ETF EUR (ACC": "IMEU.L"
-  "ISHARES CORE MSCI EM IMI UCITS ETF": "EIMI.L"
-  "ISHARES CORE S&P 500 UCITS ETF": "CSPX.L"
-  "ISHARES NASDAQ 100 UCITS ETF": "CNDX.L"
+  "iShares CORE MSCI EUROPE UCITS ETF EUR-TA": "IMEU.L"
+  "iShares CORE MSCI EM IMI UCITS ETF-TA": "EIMI.L"
+  "iShares $ CORE S&P 500 UCITS ETF-TA": "CSPX.L"
+  "iShares $ NASDAQ 100 UCITS ETF-TA": "CNDX.L"
+  "אל על": "ELAL.TA"
+  # TODO: find Yahoo Finance tickers for these two:
+  # "אי.בי.אי. מניות תעשיות ביטחוניות ישראל": "???"
+  # "קסם 4A) ETF) תא 35": "???"
