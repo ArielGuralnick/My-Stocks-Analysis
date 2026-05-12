@@ -1815,10 +1815,10 @@ pre.logs .log-ok    { color: var(--green); }
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Ticker</th><th>Name</th><th>Close</th><th>RSI</th><th>vs SMA200</th><th>Buy Signal</th><th>Sell Signal</th>
+          <th>Ticker</th><th>Name</th><th>Close</th><th>RSI</th><th>vs SMA200</th><th>Trend Filter</th><th>Buy Score</th><th>Sell Score</th>
         </tr></thead>
         <tbody id="resultsBody">
-          <tr><td colspan="7"><div class="empty-state"><div class="empty-state__icon">🔍</div>No scan results yet</div></td></tr>
+          <tr><td colspan="8"><div class="empty-state"><div class="empty-state__icon">🔍</div>No scan results yet</div></td></tr>
         </tbody>
       </table>
     </div>
@@ -1916,7 +1916,7 @@ pre.logs .log-ok    { color: var(--green); }
     for (var i = 0; i < max; i++) {
       html += '<span class="pip' + (i < score ? ' ' + filledClass : '') + '"></span>';
     }
-    var labelClass = score >= 3 ? 'pips-label--high' : (score >= 2 ? 'pips-label--mid' : '');
+    var labelClass = score >= 2 ? 'pips-label--high' : (score >= 1 ? 'pips-label--mid' : '');
     html += '<span class="pips-label ' + labelClass + '">' + score + '/' + max + '</span>';
     html += '</span>';
     return html;
@@ -1969,10 +1969,8 @@ pre.logs .log-ok    { color: var(--green); }
     var topBuys = [], topSells = [];
 
     results.forEach(function(r) {
-      var buyScore = r.buy_score || 0;
-      var sellScore = r.sell_score || 0;
-      if (buyScore >= 3) { buyCount++; topBuys.push(r.ticker); }
-      else if (sellScore >= 3) { sellCount++; topSells.push(r.ticker); }
+      if (r.buy_passes) { buyCount++; topBuys.push(r.ticker); }
+      else if (r.sell_passes) { sellCount++; topSells.push(r.ticker); }
       else holdCount++;
     });
 
@@ -2044,18 +2042,28 @@ pre.logs .log-ok    { color: var(--green); }
       var resHtml = '';
       latestScan.results.forEach(function(r) {
         var rsiVal = parseFloat(r.rsi || 0);
-        var rsiClass = rsiVal < 35 ? 'val-up' : (rsiVal > 70 ? 'val-down' : 'val-neutral');
+        var rsiClass = rsiVal < 30 ? 'val-up' : (rsiVal > 70 ? 'val-down' : 'val-neutral');
         var smaVal = r.sma200_delta_pct || 0;
         var smaClass = smaVal >= 0 ? 'val-up' : 'val-down';
         var smaText = (smaVal >= 0 ? '+' : '') + parseFloat(smaVal).toFixed(1) + '%';
         var buyScore = r.buy_score || 0;
         var sellScore = r.sell_score || 0;
+        // Trend filter badge: SMA200 hard gate result
+        var filterHtml;
+        if (r.sma_filter_buy) {
+          filterHtml = '<span class="badge badge-buy" title="Price above SMA200 — BUY side eligible">↑ BUY</span>';
+        } else if (r.sma_filter_sell) {
+          filterHtml = '<span class="badge badge-sell" title="Price below SMA200 — SELL side eligible">↓ SELL</span>';
+        } else {
+          filterHtml = '<span style="color:var(--text-tertiary)">—</span>';
+        }
         resHtml += '<tr>'
           + '<td class="td-ticker">' + esc(r.ticker || '') + '</td>'
           + '<td class="td-name">' + esc(r.name || '') + '</td>'
           + '<td class="td-mono">$' + parseFloat(r.close || 0).toFixed(2) + '</td>'
           + '<td><span class="' + rsiClass + '">' + rsiVal.toFixed(1) + '</span></td>'
           + '<td><span class="' + smaClass + '">' + esc(smaText) + '</span></td>'
+          + '<td>' + filterHtml + '</td>'
           + '<td>' + pips(buyScore, 4, 'buy') + '</td>'
           + '<td>' + pips(sellScore, 4, 'sell') + '</td>'
           + '</tr>';
@@ -2063,7 +2071,7 @@ pre.logs .log-ok    { color: var(--green); }
       document.getElementById('resultsBody').innerHTML = resHtml;
     } else {
       document.getElementById('resultsBody').innerHTML =
-        '<tr><td colspan="7"><div class="empty-state"><div class="empty-state__icon">🔍</div>No scan results yet</div></td></tr>';
+        '<tr><td colspan="8"><div class="empty-state"><div class="empty-state__icon">🔍</div>No scan results yet</div></td></tr>';
     }
 
     /* ── Alerts ── */

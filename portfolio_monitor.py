@@ -2,33 +2,38 @@
 Portfolio Hybrid Signal Monitor (Technical + AI Fundamental)
 ------------------------------------------------------------
 Monitors a stock portfolio loaded from an Excel file for high-probability
-BUY signals using a HYBRID workflow:
+BUY/SELL signals using a HYBRID workflow:
 
-    Step 1 — Technical Filter (2-out-of-4 rule)
-        Evaluate 4 independent BUY indicators:
-            • SMA200       (price above 200-day moving average → uptrend)
-            • RSI14        (RSI below 35 → oversold)
-            • MACD         (recent bullish crossover)
-            • Bollinger    (close at/below lower band → mean-reversion)
-        A stock passes ONLY IF ≥ 2 of the 4 indicators fire.
+    Step 1 — Trend Filter (Hard Gate)
+        SMA200 acts as a mandatory gate — NOT a scoring vote:
+            • BUY side:  price MUST be above the 200-day SMA
+            • SELL side: price MUST be below the 200-day SMA
+        If this condition is not met, evaluation stops for that side.
 
-    Step 2 — News Fetching
-        If the technical score ≥ 2, fetch the top 5 most recent news
-        headlines for that ticker via yfinance. If there is no news,
-        skip the stock.
+    Step 2 — Signal Scoring (2-out-of-4 rule)
+        If the trend filter passes, score 4 independent signals:
+            • RSI14        (< 30 oversold for BUY / > 70 overbought for SELL;
+                           or RSI divergence detected)
+            • MACD         (recent bullish/bearish crossover within 5 bars)
+            • Bollinger    (close at/beyond lower/upper band)
+            • Volume       (current volume ≥ 120% of 20-day average)
+        A stock passes ONLY IF ≥ 2 of the 4 signals fire.
 
-    Step 3 — LLM Fundamental Analysis (Anthropic API, JSON output)
+    Step 3 — News Fetching
+        If the signal score ≥ 2, fetch the top 5 most recent news
+        headlines for that ticker via yfinance.
+
+    Step 4 — LLM Fundamental Analysis (Anthropic API, JSON output)
         Send the headlines to Claude and require a strict JSON response:
             {
               "sentiment": "BUY" | "SELL" | "HOLD",
               "analysis":  "<3-sentence fundamental analysis>"
             }
 
-    Step 4 — WhatsApp Alert (Green API)
-        Only if sentiment == "BUY", send a nicely formatted WhatsApp
-        message containing:
+    Step 5 — WhatsApp Alert (Green API)
+        Send a formatted WhatsApp message containing:
             • Ticker symbol
-            • Technical score (e.g. 2/4) + which indicators triggered
+            • Signal score (e.g. 3/4) + which indicators triggered
             • The AI's fundamental analysis paragraph
         (Raw headlines are NEVER sent to WhatsApp.)
 
@@ -140,7 +145,8 @@ API_RETRY_DELAY = 5                    # Seconds between retries
 _scan_lock = threading.Lock()
 
 NEWS_HEADLINE_LIMIT = 5
-TECHNICAL_SCORE_THRESHOLD = 3          # ≥ 3 of 4 indicators must fire
+TECHNICAL_SCORE_THRESHOLD = 2          # ≥ 2 of 4 signals must fire (SMA200 is a hard filter, not a vote)
+VOLUME_SPIKE_FACTOR = 1.20             # Volume must be ≥ 120% of the 20-day average
 
 # Portfolio names (as they appear in the Excel) → Yahoo Finance tickers.
 # Loaded from config.yaml; falls back to hardcoded defaults if not set.
@@ -457,7 +463,7 @@ def fetch_history(ticker: str, period: str = "2y") -> Optional[pd.DataFrame]:
 
 
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    """Append SMA200, RSI14, MACD(12,26,9), BBands(20,2) columns."""
+    """Append SMA200, RSI14, MACD(12,26,9), BBands(20,2), VOL_AVG_20 columns."""
     df = df.copy()
     close = df["Close"].astype(float)
 
@@ -474,11 +480,53 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["BB_MID"] = bb.bollinger_mavg()
     df["BB_UPPER"] = bb.bollinger_hband()
 
+    # 20-day average volume for the volume spike signal
+    df["VOL_AVG_20"] = df["Volume"].astype(float).rolling(window=20, min_periods=10).mean()
+
     return df
 
 
+def check_rsi_divergence(df: pd.DataFrame, side: str, lookback: int = 20) -> tuple[bool, str]:
+    """Detect simple RSI divergence over the last `lookback` bars.
+
+    Bullish divergence (BUY):  price makes a lower low but RSI makes a higher low.
+    Bearish divergence (SELL): price makes a higher high but RSI makes a lower high.
+    Returns (detected, detail_string).
+    """
+    sub = df.tail(lookback).dropna(subset=["Close", "RSI_14"])
+    if len(sub) < 6:
+        return False, ""
+
+    half = len(sub) // 2
+    early = sub.iloc[:half]
+    recent = sub.iloc[half:]
+
+    if side == "BUY":
+        p_early = float(early["Close"].min())
+        p_recent = float(recent["Close"].min())
+        r_early = float(early["RSI_14"].min())
+        r_recent = float(recent["RSI_14"].min())
+        if p_recent < p_early and r_recent > r_early:
+            return True, (
+                f"Bullish divergence: price low {p_recent:.2f} < {p_early:.2f}, "
+                f"RSI low {r_recent:.1f} > {r_early:.1f}"
+            )
+    else:
+        p_early = float(early["Close"].max())
+        p_recent = float(recent["Close"].max())
+        r_early = float(early["RSI_14"].max())
+        r_recent = float(recent["RSI_14"].max())
+        if p_recent > p_early and r_recent < r_early:
+            return True, (
+                f"Bearish divergence: price high {p_recent:.2f} > {p_early:.2f}, "
+                f"RSI high {r_recent:.1f} < {r_early:.1f}"
+            )
+
+    return False, ""
+
+
 # ---------------------------------------------------------------------------
-# TECHNICAL SIGNAL LOGIC (2-out-of-4 rule)
+# TECHNICAL SIGNAL LOGIC (Filter + Signal architecture)
 # ---------------------------------------------------------------------------
 
 def macd_crossed_up_recently(df: pd.DataFrame, lookback: int = 5) -> bool:
@@ -508,50 +556,53 @@ def macd_crossed_down_recently(df: pd.DataFrame, lookback: int = 5) -> bool:
 
 
 def evaluate_technical_signals(df: pd.DataFrame) -> dict:
-    """Evaluate 4 INDEPENDENT BUY indicators AND 4 INDEPENDENT SELL indicators.
+    """Filter + Signal architecture.
 
-    A side passes the filter when at least TECHNICAL_SCORE_THRESHOLD (=3) of
-    its 4 indicators fire. BUY and SELL are evaluated independently in the
-    same scan.
+    Step 1 — Trend Filter (hard gate, SMA200):
+        BUY side:  price MUST be above SMA200 — otherwise buy_passes=False immediately.
+        SELL side: price MUST be below SMA200 — otherwise sell_passes=False immediately.
 
-    BUY indicators:
-        1. SMA200     — close > 200-day SMA  (long-term uptrend)
-        2. RSI14      — RSI < 35             (oversold)
-        3. MACD       — bullish crossover within last 5 bars
-        4. Bollinger  — close ≤ lower band   (mean-reversion buy zone)
-
-    SELL indicators:
-        1. SMA200     — close < 200-day SMA  (long-term downtrend)
-        2. RSI14      — RSI > 70             (overbought)
-        3. MACD       — bearish crossover within last 5 bars
-        4. Bollinger  — close ≥ upper band   (overextended)
+    Step 2 — Signal Scoring (4 signals, need ≥ TECHNICAL_SCORE_THRESHOLD=2):
+        1. RSI14   — oversold (< 30) for BUY / overbought (> 70) for SELL,
+                     OR RSI divergence detected
+        2. MACD    — bullish/bearish crossover within last 5 bars
+        3. Bollinger — close at/beyond lower/upper band
+        4. Volume  — current volume ≥ VOLUME_SPIKE_FACTOR × 20-day average volume
     """
     last = df.iloc[-1]
-    close = float(last["Close"])
-    sma200 = float(last["SMA_200"])
-    rsi = float(last["RSI_14"])
+    close    = float(last["Close"])
+    sma200   = float(last["SMA_200"])
+    rsi      = float(last["RSI_14"])
     bb_lower = float(last["BB_LOWER"])
     bb_upper = float(last["BB_UPPER"])
     macd_val = float(last["MACD"])
     macd_sig = float(last["MACD_SIGNAL"])
+    volume   = float(last["Volume"])
+    vol_avg  = float(last["VOL_AVG_20"]) if not pd.isna(last["VOL_AVG_20"]) else 0.0
 
-    # --- 4 independent BUY indicators ---
-    sma_buy = close > sma200
-    rsi_buy = rsi < 35
-    macd_buy = macd_crossed_up_recently(df, lookback=5)
-    bb_buy = close <= bb_lower
+    # ── Trend Filter (SMA200 hard gate) ─────────────────────────────────────
+    sma_filter_buy  = close > sma200
+    sma_filter_sell = close < sma200
+
+    # ── RSI divergence (bonus check that extends the RSI signal) ────────────
+    rsi_div_buy,  rsi_div_buy_detail  = check_rsi_divergence(df, "BUY")
+    rsi_div_sell, rsi_div_sell_detail = check_rsi_divergence(df, "SELL")
+
+    # ── BUY signals (scored only when sma_filter_buy passes) ────────────────
+    rsi_buy    = rsi < 30 or rsi_div_buy
+    macd_buy   = macd_crossed_up_recently(df, lookback=5)
+    bb_buy     = close <= bb_lower
+    vol_buy    = vol_avg > 0 and volume >= VOLUME_SPIKE_FACTOR * vol_avg
 
     buy_triggered: list[dict] = []
-    if sma_buy:
-        buy_triggered.append({
-            "name": "SMA200",
-            "detail": f"Close ${close:.2f} > SMA200 ${sma200:.2f} (uptrend)",
-        })
     if rsi_buy:
-        buy_triggered.append({
-            "name": "RSI14",
-            "detail": f"RSI {rsi:.2f} < 35 (oversold)",
-        })
+        if rsi < 30:
+            detail = f"RSI {rsi:.2f} < 30 (oversold)"
+            if rsi_div_buy:
+                detail += f"; {rsi_div_buy_detail}"
+        else:
+            detail = rsi_div_buy_detail
+        buy_triggered.append({"name": "RSI14", "detail": detail})
     if macd_buy:
         buy_triggered.append({
             "name": "MACD",
@@ -560,26 +611,30 @@ def evaluate_technical_signals(df: pd.DataFrame) -> dict:
     if bb_buy:
         buy_triggered.append({
             "name": "Bollinger",
-            "detail": f"Close ${close:.2f} ≤ BB lower ${bb_lower:.2f}",
+            "detail": f"Close {close:.2f} ≤ BB lower {bb_lower:.2f}",
+        })
+    if vol_buy:
+        pct = (volume / vol_avg - 1) * 100
+        buy_triggered.append({
+            "name": "Volume",
+            "detail": f"Vol {volume:,.0f} is +{pct:.0f}% above 20-day avg {vol_avg:,.0f}",
         })
 
-    # --- 4 independent SELL indicators ---
-    sma_sell = close < sma200
-    rsi_sell = rsi > 70
-    macd_sell = macd_crossed_down_recently(df, lookback=5)
-    bb_sell = close >= bb_upper
+    # ── SELL signals (scored only when sma_filter_sell passes) ──────────────
+    rsi_sell   = rsi > 70 or rsi_div_sell
+    macd_sell  = macd_crossed_down_recently(df, lookback=5)
+    bb_sell    = close >= bb_upper
+    vol_sell   = vol_avg > 0 and volume >= VOLUME_SPIKE_FACTOR * vol_avg
 
     sell_triggered: list[dict] = []
-    if sma_sell:
-        sell_triggered.append({
-            "name": "SMA200",
-            "detail": f"Close ${close:.2f} < SMA200 ${sma200:.2f} (downtrend)",
-        })
     if rsi_sell:
-        sell_triggered.append({
-            "name": "RSI14",
-            "detail": f"RSI {rsi:.2f} > 70 (overbought)",
-        })
+        if rsi > 70:
+            detail = f"RSI {rsi:.2f} > 70 (overbought)"
+            if rsi_div_sell:
+                detail += f"; {rsi_div_sell_detail}"
+        else:
+            detail = rsi_div_sell_detail
+        sell_triggered.append({"name": "RSI14", "detail": detail})
     if macd_sell:
         sell_triggered.append({
             "name": "MACD",
@@ -588,10 +643,16 @@ def evaluate_technical_signals(df: pd.DataFrame) -> dict:
     if bb_sell:
         sell_triggered.append({
             "name": "Bollinger",
-            "detail": f"Close ${close:.2f} ≥ BB upper ${bb_upper:.2f}",
+            "detail": f"Close {close:.2f} ≥ BB upper {bb_upper:.2f}",
+        })
+    if vol_sell:
+        pct = (volume / vol_avg - 1) * 100
+        sell_triggered.append({
+            "name": "Volume",
+            "detail": f"Vol {volume:,.0f} is +{pct:.0f}% above 20-day avg {vol_avg:,.0f}",
         })
 
-    buy_score = len(buy_triggered)
+    buy_score  = len(buy_triggered)
     sell_score = len(sell_triggered)
 
     return {
@@ -603,14 +664,19 @@ def evaluate_technical_signals(df: pd.DataFrame) -> dict:
         "bb_upper": bb_upper,
         "macd": macd_val,
         "macd_signal": macd_sig,
+        "volume": volume,
+        "vol_avg_20": vol_avg,
+        # Trend filter results
+        "sma_filter_buy": sma_filter_buy,
+        "sma_filter_sell": sma_filter_sell,
         # BUY side
         "buy_score": buy_score,
         "buy_triggered": buy_triggered,
-        "buy_passes": buy_score >= TECHNICAL_SCORE_THRESHOLD,
+        "buy_passes": sma_filter_buy and buy_score >= TECHNICAL_SCORE_THRESHOLD,
         # SELL side
         "sell_score": sell_score,
         "sell_triggered": sell_triggered,
-        "sell_passes": sell_score >= TECHNICAL_SCORE_THRESHOLD,
+        "sell_passes": sma_filter_sell and sell_score >= TECHNICAL_SCORE_THRESHOLD,
     }
 
 
@@ -619,11 +685,13 @@ def evaluate_technical_signals(df: pd.DataFrame) -> dict:
 # ---------------------------------------------------------------------------
 
 def run_backtest(df: pd.DataFrame) -> Optional[dict]:
-    """Simulate the 3/4-signal strategy over the full 2-year history of df.
+    """Simulate the Filter+Signal strategy over the full 2-year history of df.
 
     Logic mirrors the live scan:
-      - BUY  signal: 3+ of (SMA200-above, RSI<35, MACD-cross-up-5bar, BB-lower-touch)
-      - SELL signal: 3+ of (SMA200-below, RSI>70, MACD-cross-down-5bar, BB-upper-touch)
+      - BUY  signal: SMA200 filter (close > SMA200) AND 2+ of
+                     (RSI<30, MACD-cross-up-5bar, BB-lower-touch, Vol>120% avg)
+      - SELL signal: SMA200 filter (close < SMA200) AND 2+ of
+                     (RSI>70, MACD-cross-down-5bar, BB-upper-touch, Vol>120% avg)
       - Entry: buy at next day's open after a BUY signal (not already in position)
       - Exit:  sell at next day's open after a SELL signal (while in position)
       - Open position at end of history is closed at the last close price.
@@ -632,7 +700,7 @@ def run_backtest(df: pd.DataFrame) -> Optional[dict]:
     or None if there is not enough data.
     """
     required_cols = {"Close", "Open", "SMA_200", "RSI_14", "MACD", "MACD_SIGNAL",
-                     "BB_LOWER", "BB_UPPER"}
+                     "BB_LOWER", "BB_UPPER", "VOL_AVG_20"}
     if len(df) < 210 or not required_cols.issubset(df.columns):
         return None
 
@@ -644,6 +712,8 @@ def run_backtest(df: pd.DataFrame) -> Optional[dict]:
     macd_sig   = df["MACD_SIGNAL"]
     bb_lower   = df["BB_LOWER"]
     bb_upper   = df["BB_UPPER"]
+    volume     = df["Volume"].astype(float)
+    vol_avg    = df["VOL_AVG_20"]
 
     # Vectorised MACD crossover days (same logic as macd_crossed_*_recently)
     cross_up   = (macd >= macd_sig) & (macd.shift(1) < macd_sig.shift(1))
@@ -651,22 +721,24 @@ def run_backtest(df: pd.DataFrame) -> Optional[dict]:
     macd_buy_ind  = cross_up.rolling(5,  min_periods=1).max().astype(bool)
     macd_sell_ind = cross_down.rolling(5, min_periods=1).max().astype(bool)
 
-    # Per-row signal scores
+    vol_spike = volume >= VOLUME_SPIKE_FACTOR * vol_avg
+
+    # Per-row signal scores (4 signals, SMA200 is a hard filter)
     buy_scores = (
-        (close > sma200).astype(int) +
-        (rsi < 35).astype(int) +
+        (rsi < 30).astype(int) +
         macd_buy_ind.astype(int) +
-        (close <= bb_lower).astype(int)
+        (close <= bb_lower).astype(int) +
+        vol_spike.astype(int)
     )
     sell_scores = (
-        (close < sma200).astype(int) +
         (rsi > 70).astype(int) +
         macd_sell_ind.astype(int) +
-        (close >= bb_upper).astype(int)
+        (close >= bb_upper).astype(int) +
+        vol_spike.astype(int)
     )
 
-    buy_signals  = buy_scores  >= TECHNICAL_SCORE_THRESHOLD
-    sell_signals = sell_scores >= TECHNICAL_SCORE_THRESHOLD
+    buy_signals  = (close > sma200) & (buy_scores  >= TECHNICAL_SCORE_THRESHOLD)
+    sell_signals = (close < sma200) & (sell_scores >= TECHNICAL_SCORE_THRESHOLD)
 
     # Trade simulation: execute at next-day open
     in_position = False
@@ -961,10 +1033,16 @@ def format_hybrid_alert(
         header_emoji = "🟢"
         triggered = tech["buy_triggered"]
         score = tech["buy_score"]
+        sma_detail = (
+            f"Price {tech['close']:.2f} > SMA200 {tech['sma200']:.2f} ✅"
+        )
     else:
         header_emoji = "🔴"
         triggered = tech["sell_triggered"]
         score = tech["sell_score"]
+        sma_detail = (
+            f"Price {tech['close']:.2f} < SMA200 {tech['sma200']:.2f} ✅"
+        )
 
     triggered_lines = "\n".join(
         f"  • {ind['name']}: {ind['detail']}" for ind in triggered
@@ -1005,8 +1083,9 @@ def format_hybrid_alert(
         f"📅 Date: {tech['date']}\n"
         f"💵 Close: {tech['close']:.2f}\n"
         f"\n"
-        f"📊 *Technical Score: {score}/4*\n"
-        f"Triggered indicators:\n{triggered_lines}\n"
+        f"🔍 *Trend Filter (SMA200)*: {sma_detail}\n"
+        f"📊 *Score: {score}/4 indicators met*\n"
+        f"Triggered signals:\n{triggered_lines}\n"
         f"\n"
         f"{ai_section}"
         f"{backtest_section}"
@@ -1136,10 +1215,13 @@ def _run_once_inner(force: bool = False, notify: bool = True, manual: bool = Fal
             df = compute_indicators(df)
             tech = evaluate_technical_signals(df)
 
+            sma_delta_pct = (tech["close"] - tech["sma200"]) / tech["sma200"] * 100
             log.info(
-                "%-10s close=%-9.2f rsi=%-6.2f Δsma200=%+6.2f%%  buy=%d/4 sell=%d/4",
-                ticker, tech["close"], tech["rsi"],
-                (tech["close"] - tech["sma200"]) / tech["sma200"] * 100,
+                "%-10s close=%-9.2f rsi=%-6.2f Δsma200=%+6.2f%%  "
+                "sma_filter=buy:%-5s sell:%-5s  score=buy:%d/4 sell:%d/4",
+                ticker, tech["close"], tech["rsi"], sma_delta_pct,
+                "✓" if tech["sma_filter_buy"] else "✗",
+                "✓" if tech["sma_filter_sell"] else "✗",
                 tech["buy_score"], tech["sell_score"],
             )
 
@@ -1148,7 +1230,11 @@ def _run_once_inner(force: bool = False, notify: bool = True, manual: bool = Fal
                 "ticker": ticker,
                 "close": tech["close"],
                 "rsi": round(tech["rsi"], 2),
-                "sma200_delta_pct": round((tech["close"] - tech["sma200"]) / tech["sma200"] * 100, 2),
+                "sma200_delta_pct": round(sma_delta_pct, 2),
+                "sma_filter_buy": tech["sma_filter_buy"],
+                "sma_filter_sell": tech["sma_filter_sell"],
+                "volume": tech["volume"],
+                "vol_avg_20": round(tech["vol_avg_20"], 0),
                 "buy_score": tech["buy_score"],
                 "sell_score": tech["sell_score"],
                 "buy_passes": tech["buy_passes"],
@@ -1201,7 +1287,7 @@ def _process_signal_side(
 
     indicator_names = ", ".join(ind["name"] for ind in triggered)
     log.info(
-        "[%s] PASSED %s technical filter (%d/4: %s) — fetching news…",
+        "[%s] PASSED %s — SMA200 filter ✓, score %d/4 signals (%s) — fetching news…",
         ticker, side, score, indicator_names,
     )
 
