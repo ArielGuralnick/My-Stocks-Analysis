@@ -86,6 +86,12 @@ _log       = logging.getLogger("dashboard")
 _ohlcv_cache: dict = {}
 _OHLCV_TTL = 300  # seconds
 
+# Rate-limit GitHub pulls on /api/data to at most once every 10 minutes so we
+# always serve fresh scan history even when the in-process scheduler is asleep
+# (Render free tier spins the service down, killing the APScheduler thread).
+_last_gh_pull: float = 0.0
+_GH_PULL_INTERVAL = 600  # seconds
+
 
 def _github_pull() -> bool:
     """Download scan_history.json from GitHub into the local DATA_DIR.
@@ -578,6 +584,7 @@ def api_force_scan():
 
     try:
         from portfolio_monitor import run_once
+        _github_pull()
         run_once(force=True, manual=True)
         _github_push()
     except Exception as exc:
@@ -607,6 +614,13 @@ def _sanitize_json(obj):
 @app.route("/api/data")
 def api_data():
     """JSON endpoint for the static Netlify dashboard to fetch live data."""
+    import time
+    global _last_gh_pull
+    now = time.monotonic()
+    if now - _last_gh_pull >= _GH_PULL_INTERVAL:
+        if _github_pull():
+            _last_gh_pull = now
+
     scans = _load_json(SCAN_HISTORY_FILE, [])
     _attach_display_times(scans)
     cooldowns = _get_cooldowns()
