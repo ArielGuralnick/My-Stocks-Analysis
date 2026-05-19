@@ -116,6 +116,10 @@ WHATSAPP_PHONE_NUMBER = os.getenv("WHATSAPP_PHONE_NUMBER")  # e.g. 972501234567
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
+# Tavily Search API (web-search mode for LLM fundamental analysis)
+# When set, Claude actively searches the web instead of relying on yfinance headlines.
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+
 # Excel settings: config.yaml > .env > auto-detect
 EXCEL_FILE = _cfg_excel.get("file") or os.getenv("EXCEL_FILE", "")
 if not EXCEL_FILE:
@@ -816,7 +820,7 @@ def fetch_news(ticker: str, limit: int = NEWS_HEADLINE_LIMIT) -> list[str]:
 # LLM FUNDAMENTAL ANALYSIS (Anthropic API, strict JSON)
 # ---------------------------------------------------------------------------
 
-_LLM_SYSTEM_PROMPT = (
+_LLM_SYSTEM_PROMPT_HEADLINES = (
     "You are a professional equity research analyst. You read recent news "
     "headlines about a stock and produce a concise fundamental sentiment "
     "judgement. You ALWAYS respond with a single valid JSON object and "
@@ -824,11 +828,101 @@ _LLM_SYSTEM_PROMPT = (
     "no commentary outside the JSON."
 )
 
+_LLM_SYSTEM_PROMPT_WEB = (
+    "You are a professional equity research analyst with access to web search. "
+    "Given a stock ticker and a technical signal, research the stock by searching "
+    "for recent news, earnings reports, analyst opinions, and market developments. "
+    "Make 2-3 targeted searches, then produce a fundamental sentiment judgement. "
+    "You ALWAYS finish by responding with a single valid JSON object and "
+    "absolutely nothing else — no markdown, no code fences, no preamble, "
+    "no commentary outside the JSON."
+)
 
-def _build_llm_user_prompt(ticker: str, headlines: list[str], side: str) -> str:
-    """Build the user prompt. `side` is 'BUY' or 'SELL' — the technical side
-    that triggered the lookup. The LLM is told what the technicals suggest
-    but is still asked for an INDEPENDENT fundamental judgement."""
+_TAVILY_TOOL_DEF = {
+    "name": "search_web",
+    "description": (
+        "Search the web for recent news, analyst reports, earnings data, and "
+        "market information about a stock or financial topic."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": (
+                    "Search query, e.g. 'AAPL Q2 2026 earnings results' or "
+                    "'Apple stock analyst price target downgrade 2026'"
+                ),
+            }
+        },
+        "required": ["query"],
+    },
+}
+
+
+def _tavily_search(query: str, max_results: int = 5) -> list[dict]:
+    """Call Tavily Search API. Returns list of result dicts."""
+    try:
+        resp = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": TAVILY_API_KEY,
+                "query": query,
+                "search_depth": "basic",
+                "max_results": max_results,
+                "include_answer": False,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.json().get("results", [])
+    except Exception as e:
+        log.error("Tavily search failed for %r: %s", query, e)
+        return []
+
+
+def _format_tavily_results(results: list[dict]) -> str:
+    """Format Tavily results into a compact string for the tool_result content."""
+    if not results:
+        return "No results found."
+    parts = []
+    for r in results:
+        title = r.get("title", "").strip()
+        url = r.get("url", "").strip()
+        content = r.get("content", "").strip()[:600]
+        parts.append(f"**{title}**\n{url}\n{content}")
+    return "\n\n---\n\n".join(parts)
+
+
+def _build_llm_user_prompt_web(ticker: str, side: str) -> str:
+    """User prompt for the web-search (Tavily) path."""
+    side_context = (
+        "Technical analysis is flashing a BUY signal (oversold/bullish setup). "
+        "Decide whether recent fundamentals support buying."
+        if side == "BUY"
+        else
+        "Technical analysis is flashing a SELL signal (overbought/bearish setup). "
+        "Decide whether recent fundamentals support selling."
+    )
+    return (
+        f"Ticker: {ticker}\n"
+        f"Context: {side_context}\n\n"
+        f"Search the web for recent news, earnings, analyst coverage, and any "
+        f"significant developments for {ticker}. Make 2-3 targeted searches, "
+        f"then decide the fundamental sentiment.\n\n"
+        "Respond with a JSON object having EXACTLY these two keys:\n"
+        '  "sentiment": one of "BUY", "SELL", or "HOLD"\n'
+        '  "analysis":  a concise fundamental analysis of EXACTLY 3 sentences '
+        "explaining the sentiment, referencing what you found.\n\n"
+        "Be honest and independent — if the news contradicts the technical setup, "
+        'return "HOLD" or the opposite sentiment.\n\n'
+        "Output ONLY the JSON object. No markdown. No code fences. No extra text.\n"
+        'Example: {"sentiment": "BUY", "analysis": "Sentence one. Sentence two. Sentence three."}'
+    )
+
+
+def _build_llm_user_prompt_headlines(ticker: str, headlines: list[str], side: str) -> str:
+    """User prompt for the yfinance-headlines fallback path."""
     headlines_block = "\n".join(f"{i+1}. {h}" for i, h in enumerate(headlines))
     side_context = (
         "Technical analysis is currently flashing a BUY signal "
@@ -869,7 +963,6 @@ def _parse_llm_json(text: str) -> Optional[dict]:
 
     cleaned = text.strip()
 
-    # Strip markdown code fences if present.
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json|JSON)?\s*", "", cleaned)
         cleaned = re.sub(r"\s*```$", "", cleaned)
@@ -879,7 +972,6 @@ def _parse_llm_json(text: str) -> Optional[dict]:
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError:
-        # Fallback: extract the first {...} block (greedy, dot-all).
         match = re.search(r"\{.*\}", cleaned, re.DOTALL)
         if match:
             try:
@@ -905,30 +997,87 @@ def _parse_llm_json(text: str) -> Optional[dict]:
     return {"sentiment": sentiment, "analysis": analysis}
 
 
-def analyze_with_llm(ticker: str, headlines: list[str], side: str) -> Optional[dict]:
-    """Call the Anthropic API to analyze the headlines. `side` is the
-    technical side that triggered the call ('BUY' or 'SELL'). Returns
-    {"sentiment": "...", "analysis": "..."} or None on any failure."""
-    if not ANTHROPIC_API_KEY:
-        log.error("ANTHROPIC_API_KEY missing — skipping LLM analysis.")
+def _extract_text_from_response(resp) -> str:
+    """Pull concatenated text from an Anthropic response object."""
+    parts = []
+    for block in resp.content:
+        text = getattr(block, "text", None)
+        if text:
+            parts.append(text)
+    return "".join(parts).strip()
+
+
+def _analyze_with_web_search(client, ticker: str, side: str) -> Optional[dict]:
+    """Agentic loop: Claude calls search_web via Tavily until it produces JSON."""
+    messages = [{"role": "user", "content": _build_llm_user_prompt_web(ticker, side)}]
+    max_rounds = 6  # safety cap: up to ~3 searches + final answer
+
+    for round_num in range(max_rounds):
+        try:
+            resp = client.messages.create(
+                model=ANTHROPIC_MODEL,
+                max_tokens=2000,
+                system=_LLM_SYSTEM_PROMPT_WEB,
+                tools=[_TAVILY_TOOL_DEF],
+                messages=messages,
+            )
+        except Exception as e:
+            log.error("Anthropic API error on round %d for %s: %s", round_num + 1, ticker, e)
+            return None
+
+        if resp.stop_reason == "end_turn":
+            raw = _extract_text_from_response(resp)
+            if not raw:
+                log.error("Empty LLM response for %s (web mode)", ticker)
+                return None
+            parsed = _parse_llm_json(raw)
+            if parsed is None:
+                log.error("Could not parse LLM JSON for %s. Raw: %s", ticker, raw[:300])
+            return parsed
+
+        if resp.stop_reason == "tool_use":
+            # Append assistant turn (including tool_use blocks).
+            messages.append({"role": "assistant", "content": resp.content})
+
+            tool_results = []
+            for block in resp.content:
+                if getattr(block, "type", None) != "tool_use":
+                    continue
+                query = block.input.get("query", "")
+                log.info("[%s] Claude searching: %r", ticker, query)
+                results = _tavily_search(query)
+                formatted = _format_tavily_results(results)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": formatted,
+                })
+
+            messages.append({"role": "user", "content": tool_results})
+            continue
+
+        # Unexpected stop reason — extract whatever text we have.
+        log.warning("[%s] Unexpected stop_reason=%r on round %d", ticker, resp.stop_reason, round_num + 1)
+        raw = _extract_text_from_response(resp)
+        if raw:
+            return _parse_llm_json(raw)
         return None
 
-    try:
-        from anthropic import Anthropic
-    except ImportError:
-        log.error("anthropic package not installed. Run: pip install anthropic")
-        return None
+    log.error("[%s] Web-search LLM exceeded max rounds (%d)", ticker, max_rounds)
+    return None
 
-    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+
+def _analyze_with_headlines(client, ticker: str, headlines: list[str], side: str) -> Optional[dict]:
+    """Single-shot LLM call using pre-fetched yfinance headlines (no tool use)."""
     resp = None
     for attempt in range(1, API_MAX_RETRIES + 1):
         try:
             resp = client.messages.create(
                 model=ANTHROPIC_MODEL,
                 max_tokens=500,
-                system=_LLM_SYSTEM_PROMPT,
+                system=_LLM_SYSTEM_PROMPT_HEADLINES,
                 messages=[
-                    {"role": "user", "content": _build_llm_user_prompt(ticker, headlines, side)},
+                    {"role": "user", "content": _build_llm_user_prompt_headlines(ticker, headlines, side)},
                 ],
             )
             break
@@ -941,14 +1090,8 @@ def analyze_with_llm(ticker: str, headlines: list[str], side: str) -> Optional[d
                 log.error("Anthropic API exhausted all %d retries for %s.", API_MAX_RETRIES, ticker)
                 return None
 
-    # Concatenate any text blocks in the response.
     try:
-        parts = []
-        for block in resp.content:
-            text = getattr(block, "text", None)
-            if text:
-                parts.append(text)
-        raw = "".join(parts).strip()
+        raw = _extract_text_from_response(resp)
     except Exception as e:
         log.error("Could not extract text from Anthropic response for %s: %s", ticker, e)
         return None
@@ -961,6 +1104,32 @@ def analyze_with_llm(ticker: str, headlines: list[str], side: str) -> Optional[d
     if parsed is None:
         log.error("Could not parse LLM JSON for %s. Raw: %s", ticker, raw[:300])
     return parsed
+
+
+def analyze_with_llm(ticker: str, headlines: list[str], side: str) -> Optional[dict]:
+    """Run fundamental analysis via Claude.
+
+    If TAVILY_API_KEY is set, Claude actively searches the web (tool-use loop).
+    Otherwise falls back to analysing the pre-fetched yfinance `headlines`.
+    Returns {"sentiment": "...", "analysis": "..."} or None on any failure.
+    """
+    if not ANTHROPIC_API_KEY:
+        log.error("ANTHROPIC_API_KEY missing — skipping LLM analysis.")
+        return None
+
+    try:
+        from anthropic import Anthropic
+    except ImportError:
+        log.error("anthropic package not installed. Run: pip install anthropic")
+        return None
+
+    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    if TAVILY_API_KEY:
+        log.info("[%s] Web-search mode active — Claude will search Tavily.", ticker)
+        return _analyze_with_web_search(client, ticker, side)
+
+    return _analyze_with_headlines(client, ticker, headlines, side)
 
 
 # ---------------------------------------------------------------------------
@@ -1291,17 +1460,22 @@ def _process_signal_side(
         ticker, side, score, indicator_names,
     )
 
-    # ---------- Step 2: News fetching (optional — alert is sent regardless) ----------
-    headlines = fetch_news(ticker, limit=NEWS_HEADLINE_LIMIT)
+    # ---------- Step 2: News fetching (skipped in web-search mode) ----------
+    headlines: list[str] = []
     llm: Optional[dict] = None
 
-    if not headlines:
-        log.info("[%s] No news available — will send alert without AI analysis (%s).", ticker, side)
+    if TAVILY_API_KEY:
+        # Web-search mode: Claude fetches its own sources via Tavily.
+        log.info("[%s] Web-search mode — skipping yfinance headlines, Claude will search.", ticker)
     else:
-        log.info("[%s] %d headline(s) fetched — calling Anthropic for %s…",
-                 ticker, len(headlines), side)
+        headlines = fetch_news(ticker, limit=NEWS_HEADLINE_LIMIT)
+        if not headlines:
+            log.info("[%s] No news available — will send alert without AI analysis (%s).", ticker, side)
 
-        # ---------- Step 3: LLM fundamental analysis ----------
+    # ---------- Step 3: LLM fundamental analysis ----------
+    if TAVILY_API_KEY or headlines:
+        log.info("[%s] Calling Anthropic for %s analysis (%s)…",
+                 ticker, "web-research" if TAVILY_API_KEY else f"{len(headlines)} headline(s)", side)
         llm = analyze_with_llm(ticker, headlines, side=side)
         if llm is None:
             log.warning("[%s] LLM analysis failed — sending alert without AI analysis.", ticker)
