@@ -255,8 +255,9 @@ def _hydrate_state_from_history(state: dict) -> dict:
     restart, but scan_history.json is pushed to GitHub and pulled back on
     startup. Without this merge, a restart between the 48h cooldown window
     and the next scan causes duplicate WhatsApp alerts (the cooldown check
-    sees an empty state). Walk the retained scans and, for each successful
-    (ticker, side) alert, record the most recent timestamp.
+    sees an empty state). Walk the retained scans and, for each triggered
+    (ticker, side) alert (regardless of WhatsApp success), record the most
+    recent timestamp.
     """
     history = load_scan_history()
     if not isinstance(history, list) or not history:
@@ -264,8 +265,6 @@ def _hydrate_state_from_history(state: dict) -> dict:
 
     for scan in history:
         for alert in scan.get("alerts_sent", []) or []:
-            if not alert.get("whatsapp_sent"):
-                continue
             ticker = alert.get("ticker")
             side = alert.get("side")
             ts_str = alert.get("timestamp")
@@ -1500,11 +1499,13 @@ def _process_signal_side(
     log.info("ALERT %s %s\n%s", side, ticker, message)
 
     sent = send_whatsapp(message)
-    if sent:
-        mark_alerted(state, ticker, side)
-    else:
+    # Mark cooldown regardless of WhatsApp success — prevents the signal from
+    # firing on every scan when Green API is down, then flooding when it recovers.
+    mark_alerted(state, ticker, side)
+    if not sent:
         log.warning(
-            "Alert NOT marked as sent (WhatsApp failed) — will retry next scan."
+            "WhatsApp failed for %s %s — cooldown still applied to prevent repeat alerts.",
+            ticker, side,
         )
 
     return {
