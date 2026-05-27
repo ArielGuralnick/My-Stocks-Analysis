@@ -2545,11 +2545,16 @@ def _start_scheduler() -> None:
         misfire_grace_time=300,
     )
 
-    # One-shot startup scan: runs ~5s after the service comes up so the dashboard
-    # has fresh data on first load (Render spins down free services when idle).
-    # Only fires if no scan has run in the last 90 minutes — prevents duplicate
-    # alerts when Render restarts the service on wake-up.
-    # force=True so it still populates outside market hours.
+    # Startup scan: runs ~5s after the service comes up.
+    # Since Render free tier restarts the service on every ping (every ~1-2h),
+    # this startup scan IS the effective scheduler — APScheduler's cron jobs
+    # never fire reliably because the process dies before their scheduled time.
+    #
+    # Design:
+    #   - _github_pull() first → cooldown state is always current (persisted in scan_history.json)
+    #   - force=False → respects market hours; no scan outside Mon-Fri 09:30-16:00 ET
+    #   - notify=True → sends WhatsApp alerts normally; 48h cooldown prevents duplicates
+    #   - run_once() self-guards via MIN_SCAN_INTERVAL_MINUTES (25 min) → no double-scans
     from datetime import datetime as _dt, timedelta as _td
 
     def _startup_scan_if_stale():
@@ -2557,28 +2562,11 @@ def _start_scheduler() -> None:
             logging.getLogger("dashboard").info("Startup scan skipped — scan already running.")
             return
         try:
-            # Always pull latest scan history from GitHub first — ensures cooldowns and history
-            # are current even when the disk has stale data from a previous session.
+            # Pull latest scan history from GitHub → hydrates cooldown state from persistent store.
+            # Safe to call notify=True because _hydrate_state_from_history() in run_once() will
+            # load the 48h cooldown timestamps even if signals_state.json was wiped on restart.
             _github_pull()
-            history = _load_json(SCAN_HISTORY_FILE, [])
-            if history:
-                try:
-                    from datetime import timezone as _tz
-                    last_ts = _dt.fromisoformat(history[0]["timestamp"])
-                    if last_ts.tzinfo is None:
-                        last_ts = last_ts.replace(tzinfo=_tz.utc)
-                    age_minutes = (_dt.now(tz=_tz.utc) - last_ts).total_seconds() / 60
-                    if age_minutes < 90:
-                        logging.getLogger("dashboard").info(
-                            "Startup scan skipped — last scan was %.1f min ago.", age_minutes
-                        )
-                        return
-                except Exception:
-                    pass
-            # notify=False: populate dashboard data without re-sending WhatsApp alerts.
-            # This prevents duplicate alerts when Render restarts the service and the
-            # cooldown state file (signals_state.json) has been lost on the ephemeral FS.
-            run_once(force=True, notify=False)
+            run_once(force=False, notify=True)
             _github_push()
         finally:
             _scan_lock.release()
